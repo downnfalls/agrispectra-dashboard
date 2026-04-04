@@ -251,42 +251,6 @@ function Dashboard() {
                                 <span className="text-[#625D71] text-[9px]">{stats.ppfd.diffSource}</span>
                             </div>
                         </div>
-
-                        {/* Latency */}
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-[#3E3A4B]/50 flex items-center justify-center shrink-0">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#97CBFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-[#625D71] font-bold text-[9px] tracking-widest uppercase mb-1">Latency</p>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-white text-2xl font-bold tracking-tight">{stats.latency.value}</span>
-                                    <span className="text-gray-400 text-[10px]">{stats.latency.unit}</span>
-                                </div>
-                            </div>
-                            <div>
-                                <span className="border border-[#34D399]/50 text-[#34D399] bg-[#34D399]/10 px-2 py-0.5 rounded-full text-[9px] font-bold tracking-widest uppercase">
-                                    {stats.latency.status}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Harvest */}
-                        <div className="flex items-center gap-4 border-t border-[#3E3A4B] pt-6 flex-wrap">
-                            <div className="w-12 h-12 rounded-full bg-[#3E3A4B]/50 flex items-center justify-center shrink-0">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-[#625D71] font-bold text-[9px] tracking-widest uppercase mb-1">Harvest Estimate</p>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-white text-2xl font-bold tracking-tight">{stats.harvest.estimateDays}</span>
-                                    <span className="text-gray-400 text-[10px]">{stats.harvest.unit}</span>
-                                </div>
-                            </div>
-                            <span className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mt-4 sm:mt-0">
-                                {stats.harvest.dateStr}
-                            </span>
-                        </div>
                     </div>
 
                     {/* Power Consumption (Red box) */}
