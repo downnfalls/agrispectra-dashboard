@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"server/internal/models"
 	"server/internal/repository"
@@ -19,7 +18,6 @@ func NewLogHandler(repo *repository.LogRepo) *LogHandler {
 
 func (h *LogHandler) CreateLog(c *gin.Context) {
 	var l models.Log
-
 	if err := c.ShouldBindJSON(&l); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
@@ -27,7 +25,7 @@ func (h *LogHandler) CreateLog(c *gin.Context) {
 
 	username, exists := c.Get("username")
 	if exists {
-		l.Detail = fmt.Sprintf("[โดย %v] %s", username, l.Detail)
+		l.Username = username.(string)
 	}
 
 	if err := h.repo.CreateLog(&l); err != nil {
@@ -35,7 +33,10 @@ func (h *LogHandler) CreateLog(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "บันทึกสำเร็จ"})
+	c.JSON(http.StatusOK, gin.H{
+		"message": "บันทึกสำเร็จ",
+		"log":     l,
+	})
 }
 
 func (h *LogHandler) CreatePowerConsumption(c *gin.Context) {

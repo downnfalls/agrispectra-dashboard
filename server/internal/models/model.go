@@ -10,6 +10,7 @@ type Log struct {
 	ID        uint      `Gorm:"primaryKey" json:"id"`
 	Type      string    `json:"type"`
 	Detail    string    `json:"detail"`
+	Username  string    `json:"username"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
