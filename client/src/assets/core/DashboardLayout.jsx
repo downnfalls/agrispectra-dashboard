@@ -25,13 +25,9 @@ const DashboardLayout = () => {
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                             Energy
                         </Link>
-                        <Link to="/recipes" className="flex items-center gap-3 px-4 py-3 font-bold text-xs tracking-widest uppercase text-[#625D71] hover:bg-white/5 border-l-2 border-transparent transition-colors">
+                        <Link to="/recipes" className={`flex items-center gap-3 px-4 py-3 rounded-r-full font-bold text-xs tracking-widest uppercase transition-colors ${location.pathname === '/recipes' ? 'text-[#97CBFF] bg-[#97CBFF]/10 border-l-2 border-[#97CBFF]' : 'text-[#625D71] hover:bg-white/5 border-l-2 border-transparent'}`}>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                             Recipes
-                        </Link>
-                        <Link to="/logs" className="flex items-center gap-3 px-4 py-3 font-bold text-xs tracking-widest uppercase text-[#625D71] hover:bg-white/5 border-l-2 border-transparent transition-colors">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
-                            Logs
                         </Link>
                     </nav>
                 </div>
