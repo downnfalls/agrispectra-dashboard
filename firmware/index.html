@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Grow Controller</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; }
+        .stage-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 5px; background: #fafafa;}
+        .status { padding: 10px; margin-bottom: 15px; font-weight: bold; text-align: center; border-radius: 5px;}
+        .input-group { margin-bottom: 8px; }
+        .input-group label { display: inline-block; width: 120px; }
+        .period-group { background: #e9ecef; padding: 10px; border-radius: 5px; margin-top: 10px;}
+        .header-controls { margin-bottom: 20px; padding: 10px; border: 1px solid #007bff; border-radius: 5px; background: #e9f5ff; }
+        input[type="number"] { width: 80px; }
+    </style>
+</head>
+<body>
+
+    <img src="http://172.20.10.2:81/stream" width="400" id="videoStream" onerror="this.style.display='none'">
+
+    <div id="status" class="status" style="background: #eee;">Waiting to connect...</div>
+
+    <div class="header-controls">
+        <label for="esp32ip"><b>ESP32 IP:</b></label>
+        <input type="text" id="esp32ip" value="172.20.10.2" style="width: 150px;"> 
+        <button type="button" onclick="connectWS()" style="cursor: pointer; padding: 5px 10px;">Connect</button>
+    </div>
+
+    <div class="input-group">
+        <label for="stage"><b>Total Stages:</b></label>
+        <input type="number" id="stage" name="stage" min="1" max="10" value="2" oninput="createInputs()">
+    </div>
+    
+    <hr>
+
+    <div id="formContainer"></div>
+
+    <br>
+    <button type="button" onclick="sendData()" style="padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 5px; width: 100%;">
+        📤 Send Data to ESP32
+    </button>
+    
+    <br><br>
+    <button onclick="takePicture()" style="padding: 10px 20px; font-size: 16px; cursor: pointer; width: 100%;">📸 Take Picture</button>
+    <br><br>
+    <img id="photoResult" width="100%" alt="ภาพถ่ายจะแสดงที่นี่" style="display: none; border-radius: 5px;">
+
+<script>
+    let ws;
+
+    function takePicture() {
+        const ip = document.getElementById('esp32ip').value;
+        const imgUrl = `http://${ip}/capture?time=${Date.now()}`;
+        document.getElementById('photoResult').src = imgUrl;
+        document.getElementById('photoResult').style.display = 'block';
+    }
+
+    function connectWS() {
+        const ip = document.getElementById('esp32ip').value;
+        const wsUrl = `ws://${ip}:8080/`;
+
+        document.getElementById('status').innerText = `Connecting to ${ip}...`;
+        document.getElementById('status').style.background = "#fff3cd";
+
+        if(ws) ws.close(); // ปิดอันเก่าถ้ามี
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            document.getElementById('status').innerText = `✅ Connected to ${ip}`;
+            document.getElementById('status').style.background = "#d4edda";
+            document.getElementById('videoStream').src = `http://${ip}:81/stream`;
+            document.getElementById('videoStream').style.display = 'block';
+        };
+
+        ws.onclose = () => {
+            document.getElementById('status').innerText = "❌ Disconnected";
+            document.getElementById('status').style.background = "#f8d7da";
+        };
+
+        ws.onerror = (error) => {
+            console.error("WebSocket Error: ", error);
+        };
+    }
+
+    function createInputs() {
+        const stageCount = parseInt(document.getElementById('stage').value) || 0;
+        const container = document.getElementById('formContainer');
+        container.innerHTML = ''; 
+
+        for (let i = 1; i <= stageCount; i++) {
+            const stageHTML = `
+                <div class="stage-card" id="stage_container_${i}">
+                    <h3 style="margin-top: 0;">Stage ${i}</h3>
+                    <div class="input-group"><label>Red (0-255):</label> <input type="number" id="red_${i}" value="100"></div>
+                    <div class="input-group"><label>Far-Red (0-255):</label> <input type="number" id="farRed_${i}" value="50"></div>
+                    <div class="input-group"><label>Blue (0-255):</label> <input type="number" id="blue_${i}" value="80"></div>
+                    <div class="input-group"><label>White (0-255):</label> <input type="number" id="white_${i}" value="100"></div>
+                    <div class="input-group"><label>Leaf:</label> <input type="number" id="leaf_${i}" value="5"></div>
+                    <div class="input-group"><label>Diameter:</label> <input type="number" id="diameter_${i}" value="12"></div>
+                    <div class="input-group"><label>PPFD:</label> <input type="number" id="ppfd_${i}" value="12"></div>
+                    
+                    <div class="period-group">
+                        <b>Time Settings (Time : Intensity %):</b><br>
+                        <div class="input-group" style="margin-top: 10px;">
+                            <label>Number of Periods:</label>
+                            <input type="number" id="num_periods_${i}" value="3" min="1" max="10" oninput="createPeriods(${i})">
+                        </div>
+                        <div id="period_inputs_${i}">
+                            </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += stageHTML;
+            
+            // ตั้งค่าเวลาเริ่มต้นให้ดูมีตัวอย่าง
+            createPeriods(i, true); 
+        }
+    }
+
+    function createPeriods(stageIdx, isDefault = false) {
+        const pCount = document.getElementById(`num_periods_${stageIdx}`).value;
+        const pContainer = document.getElementById(`period_inputs_${stageIdx}`);
+        pContainer.innerHTML = '';
+        
+        const defaultTimes = ["09:00", "14:00", "22:00"];
+        const defaultVals = [20, 0, 100];
+
+        for (let j = 1; j <= pCount; j++) {
+            let t = isDefault && j <= 3 ? defaultTimes[j-1] : "00:00";
+            let v = isDefault && j <= 3 ? defaultVals[j-1] : 0;
+            
+            pContainer.innerHTML += `
+                <div class="input-group" style="margin-top:5px;">
+                    P${j} Time: <input type="time" id="time_${stageIdx}_${j}" value="${t}"> 
+                    Value (%): <input type="number" id="val_${stageIdx}_${j}" value="${v}" min="0" max="100">
+                </div>
+            `;
+        }
+    }
+
+    function sendData() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) { 
+            alert("⚠️ Please connect to ESP32 first!"); 
+            return; 
+        }
+        
+        const stageCount = parseInt(document.getElementById('stage').value);
+        let payload = {};
+
+        for (let i = 1; i <= stageCount; i++) {
+            let periodObj = {};
+            const pCount = document.getElementById(`num_periods_${i}`).value;
+            for(let j = 1; j <= pCount; j++) {
+                let t = document.getElementById(`time_${i}_${j}`).value;
+                let v = parseInt(document.getElementById(`val_${i}_${j}`).value);
+                if(t) periodObj[t] = v;
+            }
+
+            payload[`stage-${i}`] = {
+                red: parseInt(document.getElementById(`red_${i}`).value),
+                farRed: parseInt(document.getElementById(`farRed_${i}`).value),
+                blue: parseInt(document.getElementById(`blue_${i}`).value),
+                white: parseInt(document.getElementById(`white_${i}`).value),
+                leaf: parseInt(document.getElementById(`leaf_${i}`).value),
+                diameter: parseInt(document.getElementById(`diameter_${i}`).value),
+                ppfd: parseInt(document.getElementById(`ppfd_${i}`).value),
+                period: periodObj
+            };
+        }
+
+        const jsonString = JSON.stringify(payload);
+        ws.send(jsonString);
+        console.log("Sent Payload:", jsonString);
+        alert("Data sent successfully! Check ESP32 Serial Monitor.");
+    }
+    
+    window.onload = () => {
+        createInputs();
+    };
+</script>
+
+</body>
+</html>

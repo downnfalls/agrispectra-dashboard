@@ -1,0 +1,7 @@
+[wokwi]
+version = 1
+firmware = "firmware.ino.esp32.bin"
+
+[[net.forward]]
+from = 81
+to = 81
