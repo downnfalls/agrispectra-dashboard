@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import LoginPage from '../pages/login/LoginPage';
 import DashboardLayout from './DashboardLayout';
 import Dashboard from '../pages/Dashboard';
+import Energy from '../pages/Energy';
 import NotFound from '../pages/NotFound';
 
 const RequireAuth = ({ children }) => {
@@ -38,6 +39,7 @@ function PageScaffold() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="energy" element={<Energy />} />
         </Route>
 
         {/* 404 */}
