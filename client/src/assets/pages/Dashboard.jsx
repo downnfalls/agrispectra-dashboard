@@ -96,12 +96,6 @@ function Dashboard() {
             <header className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-8">
                     <h1 className="text-[#CBA6F7] text-3xl font-bold tracking-wide">JANGKOPF</h1>
-                    <div className="flex items-center gap-6">
-                        <div className="border-b-2 border-[#97CBFF] pb-1">
-                            <span className="text-white font-bold text-xs tracking-widest uppercase">Batch ID: {metadata.batchId}</span>
-                        </div>
-                        <span className="text-[#625D71] font-bold text-xs tracking-widest uppercase">Cycle: {metadata.cycleProgress}%</span>
-                    </div>
                 </div>
 
                 <div className="flex items-center gap-4">

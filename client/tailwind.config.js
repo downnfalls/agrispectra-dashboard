@@ -8,4 +8,4 @@ export default {
     extend: {},
   },
   plugins: [],
-}
+} // Force Tailwind rebuild
