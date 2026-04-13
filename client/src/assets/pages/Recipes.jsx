@@ -48,7 +48,6 @@ const initialProfiles = [
         stages: []
     }
 ];
-
 // Helper to calculate total ratio correctly
 const normalizeRatios = (b, r, fr, w) => {
     return { b, r, fr, w }; // Returning raw values, adjusting them separately in logic if needed
@@ -72,6 +71,14 @@ export default function Recipes() {
         return initialProfiles[0].id;
     });
 
+    const [deployedProfileId, setDeployedProfileId] = useState(() => {
+        const saved = localStorage.getItem('agrispectra_deployed_profile');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) { console.error('Failed to parse deployed profile', e); }
+        }
+        return null;
+    });
+
     useEffect(() => {
         localStorage.setItem('agrispectra_profiles', JSON.stringify(profiles));
     }, [profiles]);
@@ -84,7 +91,55 @@ export default function Recipes() {
         }
     }, [activeProfileId]);
 
+    useEffect(() => {
+        if (deployedProfileId !== null && deployedProfileId !== undefined) {
+            localStorage.setItem('agrispectra_deployed_profile', JSON.stringify(deployedProfileId));
+        } else {
+            localStorage.removeItem('agrispectra_deployed_profile');
+        }
+    }, [deployedProfileId]);
+
+    const [profilesSnapshot, setProfilesSnapshot] = useState(null);
+
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Fetch profiles from server on load
+    useEffect(() => {
+        const fetchProfiles = async () => {
+            setIsLoading(true);
+            try {
+                // Adjust endpoint name to whatever the backend uses for getting profiles
+                /* --- API CONNECTION COMMENTED OUT ---
+                const response = await fetch('http://192.168.1.116:8080/recipes'); 
+                if (response.ok) {
+                    const data = await response.json();
+                    if (Array.isArray(data)) {
+                        setProfiles(data);
+                    } else if (data.profiles && Array.isArray(data.profiles)) {
+                        setProfiles(data.profiles);
+                    } else if (typeof data === 'object') {
+                        // Fallback mapping if backend returns an object map format instead of list
+                        const mappedProfiles = Object.keys(data).map((key, i) => ({
+                            id: data[key].id || (i + 1),
+                            name: data[key].name || key,
+                            species: data[key].species || 'IMPORTED',
+                            stages: data[key].stages || Object.values(data[key])
+                        }));
+                        if (mappedProfiles.length > 0) setProfiles(mappedProfiles);
+                    }
+                }
+                ------------------------------------- */
+            } catch (error) {
+                console.warn('Could not fetch profiles from backend, falling back to local storage', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchProfiles();
+    }, []);
+
     const handleAddProfile = () => {
+        setProfilesSnapshot(JSON.stringify(profiles));
         const newId = Date.now();
         setProfiles([...profiles, {
             id: newId,
@@ -95,6 +150,74 @@ export default function Recipes() {
         setActiveProfileId(newId);
         setIsEditingProfile(true);
     };
+
+    const handleDiscardChanges = () => {
+        if (profilesSnapshot) {
+            const restored = JSON.parse(profilesSnapshot);
+            setProfiles(restored);
+            // Revert active profile safely
+            if (!restored.some(p => p.id === activeProfileId)) {
+                setActiveProfileId(restored.length > 0 ? restored[0].id : null);
+            }
+        }
+        setIsEditingProfile(false);
+        setProfilesSnapshot(null);
+    };
+
+    const handleSaveChanges = () => {
+        if (activeProfile) {
+            const payload = buildProfilePayload(activeProfile);
+            console.log("Saved Recipe JSON:", JSON.stringify(payload, null, 2));
+            alert("Recipe Saved! Check the browser console to see the JSON payload.");
+        }
+        setIsEditingProfile(false);
+        setProfilesSnapshot(null);
+    };
+
+    const buildProfilePayload = (profile) => {
+        if (!profile) return null;
+        
+        const payload = {
+            profile_name: profile.name
+        };
+        
+        profile.stages.forEach((stage, index) => {
+            const stageKey = `stage-${index + 1}`;
+            
+            const period = {};
+            const timeline = stage.timeline || [
+                { id: 1, time: '00:00', status: 'OFF', intensity: 0 },
+                { id: 2, time: '06:00', status: 'ACTIVE', intensity: 100 },
+                { id: 3, time: '00:00', status: 'OFF', intensity: 0 }
+            ];
+            timeline.forEach(seg => {
+                period[seg.time] = seg.status === 'ACTIVE' ? (parseInt(seg.intensity) || 0) : 0;
+            });
+            
+            payload[stageKey] = {
+                red: parseInt(stage.red) || 0,
+                farRed: parseInt(stage.farRed) || 0,
+                blue: parseInt(stage.blue) || 0,
+                white: parseInt(stage.white) || 0,
+                leaf: stage.useLeafCount !== false ? (parseInt(stage.leafCount) || null) : null,
+                leaf_density: stage.useDiameter !== false ? (parseInt(stage.diameter) || 12) : null,
+                ppfd: parseInt(stage.lightIntensity) || 0,
+                period: period
+            };
+        });
+        return payload;
+    };
+
+    // Print all profiles as JSON payloads on mount
+    useEffect(() => {
+        console.log("=== AGRI SPECTRA RECIPES DATA ===");
+        if (profiles.length > 0) {
+            const allPayloads = profiles.map(p => buildProfilePayload(p));
+            console.log("Current Profiles JSON:", JSON.stringify(allPayloads, null, 2));
+        } else {
+            console.log("No profiles available.");
+        }
+    }, [profiles.length]); // Added dependency on profiles.length so it prints on changes like adding/removing profiles too.
 
     const handleRemoveProfile = (id, e) => {
         e.stopPropagation();
@@ -189,6 +312,44 @@ export default function Recipes() {
 
     const activeProfile = profiles.find(p => p.id === activeProfileId);
 
+    const [isDeploying, setIsDeploying] = useState(false);
+    const handleDeployProfile = async () => {
+        if (!activeProfile) return;
+        
+        setIsDeploying(true);
+        try {
+            const payload = buildProfilePayload(activeProfile);
+            console.log("Sending recipe payload to server:", payload);
+            
+            /* --- API CONNECTION COMMENTED OUT ---
+            const response = await fetch('http://192.168.1.116:8080/deploy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                console.warn('Backend rejected the recipe payload. Ensure backend is running and endpoint matches.');
+            } else {
+                console.log('Recipe deployed successfully to hardware.');
+            }
+            ------------------------------------- */
+            
+            // Set as deployed once success alert finishes (mock)
+            setTimeout(() => {
+                setDeployedProfileId(activeProfile.id);
+                alert('Mock: Recipe deployed successfully to hardware!\nPayload viewable in console.');
+            }, 500);
+            
+        } catch (error) {
+            console.error('Network error deploying profile to backend:', error);
+        } finally {
+            setIsDeploying(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-[#15121B] text-white overflow-y-auto">
             
@@ -211,7 +372,8 @@ export default function Recipes() {
             {isEditingProfile && activeProfile ? (
                 <RecipeEditor 
                     profile={activeProfile} 
-                    onClose={() => setIsEditingProfile(false)} 
+                    onDiscard={handleDiscardChanges}
+                    onSave={handleSaveChanges}
                     onAddStage={() => handleAddStage(activeProfile.id)}
                     onUpdateStageName={(stageId, newName) => handleUpdateStageName(activeProfile.id, stageId, newName)}
                     onRemoveStage={(stageId) => handleRemoveStage(activeProfile.id, stageId)}
@@ -243,12 +405,13 @@ export default function Recipes() {
                             </button>
 
                             <div className="flex items-center justify-between mb-1">
-                                {isActive ? (
+                                {deployedProfileId === profile.id ? (
                                     <div className="w-5 h-5 rounded-full bg-[#4F95FF] flex items-center justify-center shrink-0">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     </div>
                                 ) : (
-                                    <div className="w-5 h-5 rounded-full border border-[#625D71] shrink-0"></div>
+                                    <div className="w-5 h-5 rounded-full border border-[#2A2732] flex items-center justify-center shrink-0 group-hover:border-[#4F95FF]/50 transition-colors">
+                                    </div>
                                 )}
                                 {isActive && <span className="text-[9px] font-bold tracking-widest text-[#4F95FF] uppercase bg-[#4F95FF]/20 px-2 py-0.5 rounded-full">ACTIVE</span>}
                             </div>
@@ -302,26 +465,26 @@ export default function Recipes() {
                 )}
             </div>
 
-            <div className="mt-auto px-8 lg:px-12 py-5 border-t border-[#2A2732] flex justify-between items-center bg-[#15121B]/90 backdrop-blur shrink-0 sticky bottom-0 z-20">
-                <div className="flex items-center gap-6">
+            {/* Floating Action Buttons */}
+            {activeProfile && (
+                <div className="fixed bottom-10 right-12 flex items-center gap-6 z-30">
                     <button 
-                        onClick={(e) => activeProfileId && handleRemoveProfile(activeProfileId, e)}
-                        disabled={!activeProfileId}
-                        className={`text-[10px] font-bold tracking-widest uppercase flex items-center gap-2 transition-colors ${activeProfileId ? 'text-red-500 hover:text-red-400' : 'text-[#625D71] cursor-not-allowed'}`}
+                        onClick={() => { setProfilesSnapshot(JSON.stringify(profiles)); setIsEditingProfile(true); }} 
+                        className="border border-[#2A2732] hover:bg-white/5 bg-[#15121C] text-white px-6 py-4 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-3 shadow-lg hover:-translate-y-0.5 duration-200"
                     >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                        Delete Profile
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        Modify Configuration Details
                     </button>
-                    <div className="w-px h-4 bg-[#2A2732]"></div>
-                    <button className="text-[10px] font-bold tracking-widest uppercase text-[#625D71] hover:text-white transition-colors">
-                        Discard Changes
+                    <button 
+                        onClick={handleDeployProfile}
+                        disabled={isDeploying}
+                        className={`bg-[#A485FF] hover:bg-[#8e6bea] text-[#15121B] px-8 py-4 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-3 shadow-[0_0_20px_rgba(164,133,255,0.3)] hover:-translate-y-0.5 duration-200 ${isDeploying ? 'opacity-70 cursor-wait' : ''}`}
+                    >
+                        {isDeploying ? 'Deploying...' : 'Use Profile'}
+                        {!isDeploying && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 10.5L21 3"></path><path d="M16 3h5v5"></path><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>}
                     </button>
                 </div>
-                <button onClick={() => setIsEditingProfile(true)} className="bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] px-6 py-3 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                    Modify Configuration Details
-                </button>
-            </div>
+            )}
             </>
             )}
             
@@ -358,18 +521,18 @@ function StageCard({ stage, onUpdate, onModify }) {
     const total = stage.blue + stage.red + stage.farRed + stage.white || 1;
 
     return (
-        <div className="w-[360px] shrink-0 border border-[#2A2732] rounded-2xl bg-[#1A1820] overflow-hidden flex flex-col relative">
+        <div className="w-[360px] lg:w-[400px] shrink-0 border border-[#2A2732] rounded-[2rem] bg-[#15121C] overflow-hidden flex flex-col relative relative">
             
             {/* Background Image Header */}
-            <div className="absolute top-0 left-0 w-full h-40 opacity-20 pointer-events-none">
-                <img src={agriImage} alt="" className="w-full h-full object-cover grayscale mix-blend-screen" />
+            <div className="absolute top-0 left-0 w-full h-[280px] pointer-events-none" style={{ maskImage: 'linear-gradient(to bottom, black 20%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 20%, transparent 100%)' }}>
+                <img src={stage.image || agriImage} alt="" className="w-full h-full object-cover grayscale mix-blend-luminosity opacity-40 object-center" />
             </div>
 
-            <div className="p-6 relative z-10">
-                <div className="inline-block bg-[#4F95FF]/20 text-[#4F95FF] border border-[#4F95FF]/30 px-3 py-1 rounded-full text-[9px] font-bold tracking-widest mb-4">
+            <div className="p-8 relative z-10">
+                <div className="inline-flex items-center bg-[#4F95FF]/20 text-[#97CBFF] border border-[#4F95FF]/30 px-4 py-1.5 rounded-full text-[9px] font-bold tracking-widest mb-6 backdrop-blur">
                     {stage.stageLabel}
                 </div>
-                <h3 className="text-2xl font-bold whitespace-pre-line leading-tight text-white mb-6">
+                <h3 className="text-3xl font-bold whitespace-pre-line leading-snug text-white mb-6">
                     {stage.name}
                 </h3>
 
@@ -418,67 +581,17 @@ function StageCard({ stage, onUpdate, onModify }) {
                 </div>
 
                 {/* Light Intensity Container */}
-                <div className="mb-8">
+                <div className="mb-4">
                     <div className="flex justify-between items-end mb-4">
-                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em]">LIGHT INTENSITY (PPFD)</span>
-                        <span className="text-2xl font-bold font-mono text-white">{stage.lightIntensity}%</span>
-                    </div>
-                    <input 
-                        type="range" min="0" max="100" 
-                        value={stage.lightIntensity} 
-                        onChange={(e) => onUpdate('lightIntensity', e.target.value)}
-                        className={`w-full thumb-purple bg-transparent`}
-                        style={{
-                            background: `linear-gradient(to right, #A485FF ${stage.lightIntensity}%, #2A2732 ${stage.lightIntensity}%)`
-                        }}
-                    />
-                </div>
-
-                {/* Cycle Intensity Container */}
-                <div className="p-5 border border-[#2A2732] rounded-2xl bg-[#1A1820]">
-                    <div className="flex justify-between items-center mb-6">
-                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em]">CYCLE INTENSITY (%)</span>
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-[#18C3B1]"></div>
-                            <span className="text-[9px] text-[#625D71] font-bold tracking-[0.2em]">{stage.id === 11 ? '12 DAYS' : '14 DAYS'}</span>
+                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] uppercase">LIGHT INTENSITY (PPFD)</span>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-3xl font-bold font-mono text-white tracking-tighter">{stage.lightIntensity}</span>
+                            <span className="text-[8px] text-[#625D71] font-bold tracking-widest uppercase">µmol/<br/>m²/s</span>
                         </div>
                     </div>
-
-                    {/* Mock Bar Chart */}
-                    <div className="flex items-end gap-1 h-20 mb-2">
-                        {/* Fake bars for mock visualization mimicking the design */}
-                        {stage.id === 11 ? (
-                            <>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[90%]"></div>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[90%]"></div>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[90%]"></div>
-                                <div className="w-1/6 bg-[#18C3B1] h-[20%]"></div>
-                                <div className="w-1/6 bg-[#18C3B1] h-[20%]"></div>
-                                <div className="w-1/6 bg-[#4F95FF] h-[5%]"></div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[95%]"></div>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[95%]"></div>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[95%]"></div>
-                                <div className="w-1/6 bg-[#FF4A4A] h-[95%]"></div>
-                                <div className="w-1/6 bg-[#18C3B1] h-[30%]"></div>
-                                <div className="w-1/6 bg-[#18C3B1] h-[30%]"></div>
-                                <div className="w-1/6 bg-[#4F95FF] h-[10%]"></div>
-                            </>
-                        )}
-                    </div>
-                    <div className="flex justify-between text-[8px] text-[#625D71] font-mono tracking-wider border-t border-[#2A2732] pt-2">
-                        <span>00:00</span>
-                        <span>06:00</span>
-                        <span>12:00</span>
-                        <span>18:00</span>
-                        <span>24:00</span>
-                    </div>
                 </div>
-                
-            </div>
 
+            </div>
         </div>
     );
 }
@@ -507,7 +620,7 @@ function SliderRow({ label, value, color, onChange, thumbClass }) {
 
 // --- NEW EDITOR COMPONENTS ---
 
-function RecipeEditor({ profile, onClose, onAddStage, onUpdateStageName, onRemoveStage, onUpdateLogic }) {
+function RecipeEditor({ profile, onDiscard, onSave, onAddStage, onUpdateStageName, onRemoveStage, onUpdateLogic }) {
     // If the profile has stages, expand the first one, otherwise null
     const [expandedStageId, setExpandedStageId] = useState(profile.stages.length > 0 ? profile.stages[0].id : null);
 
@@ -551,10 +664,10 @@ function RecipeEditor({ profile, onClose, onAddStage, onUpdateStageName, onRemov
             </div>
 
             {/* Bottom Bar for Editor */}
-            <div className="mt-auto px-8 lg:px-12 py-5 border-t border-[#2A2732] flex justify-between items-center bg-[#15121B]/90 backdrop-blur shrink-0 sticky bottom-0 z-20">
+            <div className="mt-8 mb-4 px-8 py-5 border border-[#2A2732] rounded-[2rem] flex justify-between items-center bg-[#15121C]">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#97CBFF] shadow-[0_0_8px_#97CBFF]"></div>
                         <span className="text-[10px] font-bold tracking-widest uppercase text-white">Status: Drafting</span>
                     </div>
                     <div className="flex items-center gap-2 text-[#625D71]">
@@ -564,11 +677,11 @@ function RecipeEditor({ profile, onClose, onAddStage, onUpdateStageName, onRemov
                 </div>
                 
                 <div className="flex items-center gap-6">
-                    <button onClick={onClose} className="text-[10px] font-bold tracking-widest uppercase text-[#625D71] hover:text-white transition-colors border border-[#2A2732] hover:border-white/20 rounded-full px-6 py-3">
+                    <button onClick={onDiscard} className="text-[10px] font-bold tracking-widest uppercase text-[#625D71] hover:text-white transition-colors border border-[#2A2732] hover:border-white/20 rounded-full px-6 py-3.5">
                         Discard Changes
                     </button>
-                    <button onClick={onClose} className="bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] px-8 py-3 rounded-full text-xs font-bold tracking-widest uppercase transition-colors flex items-center gap-2">
-                        Save & Deploy Recipe
+                    <button onClick={onSave} className="bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] px-10 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors shadow-[0_0_20px_rgba(151,203,255,0.3)]">
+                        Save Recipe
                     </button>
                 </div>
             </div>
@@ -583,6 +696,29 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
     const useDiameter = stage.useDiameter !== false;
     const diameter = stage.diameter || 12;
     const logicOperator = stage.logicOperator || 'AND';
+
+    // Timeline logic
+    const defaultTimeline = [
+        { id: 1, time: '00:00', status: 'OFF', intensity: 0 },
+        { id: 2, time: '06:00', status: 'ACTIVE', intensity: 100 },
+        { id: 3, time: '00:00', status: 'OFF', intensity: 0 }
+    ];
+    const timeline = stage.timeline || defaultTimeline;
+
+    const handleAddSegment = () => {
+        const newTimeline = [...timeline, { id: Date.now(), time: '00:00', status: 'OFF', intensity: 0 }];
+        onUpdateLogic('timeline', newTimeline);
+    };
+
+    const handleUpdateSegment = (id, key, value) => {
+        const newTimeline = timeline.map(seg => seg.id === id ? { ...seg, [key]: value } : seg);
+        onUpdateLogic('timeline', newTimeline);
+    };
+
+    const handleRemoveSegment = (id) => {
+        const newTimeline = timeline.filter(seg => seg.id !== id);
+        onUpdateLogic('timeline', newTimeline);
+    };
 
     return (
         <div className="bg-[#1D1A24] border border-[#2A2732] rounded-[2rem] p-8 lg:p-10 flex flex-col relative overflow-hidden">
@@ -612,44 +748,93 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
             <div className="grid grid-cols-12 gap-12 lg:gap-16 mb-12">
                 {/* Timeline */}
                 <div className="col-span-12 xl:col-span-7">
-                    <div className="flex justify-between items-center mb-6">
-                        <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71]">Photoperiod Timeline (24H)</h4>
-                        <button className="flex items-center gap-2 text-[#97CBFF] text-[10px] font-bold tracking-widest uppercase hover:text-white transition">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Add Segment
-                        </button>
-                    </div>
+                    <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71] mb-6">Photoperiod Timeline (24H)</h4>
 
-                    <div className="bg-[#15121C] rounded-2xl py-3 divide-y divide-[#2A2732]">
+                    <div className="bg-[#15121C] border border-[#2A2732] rounded-3xl pt-2 pb-6 px-4 shadow-inner">
                         {/* Headers */}
-                        <div className="grid grid-cols-3 pb-3 px-6">
-                            <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[#625D71]">Time Interval</span>
+                        <div className="grid grid-cols-[1fr_1fr_1fr_24px] gap-2 pb-3 px-6 border-b border-transparent">
+                            <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[#625D71] text-center">Time Interval</span>
                             <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[#625D71] text-center">Status</span>
-                            <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[#625D71] text-right">Intensity</span>
+                            <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[#625D71] text-center">Intensity</span>
+                            <span></span>
                         </div>
-                        {/* Row 1 */}
-                        <div className="grid grid-cols-3 py-5 px-6 items-center">
-                            <span className="text-[#97CBFF] font-mono text-sm tracking-wider">00:00 — 06:00</span>
-                            <div className="flex justify-center">
-                                <span className="bg-[#2A2732] text-[#625D71] text-[9px] px-3 py-1 rounded-full font-bold tracking-wider">OFF</span>
-                            </div>
-                            <span className="text-white font-bold text-right text-sm">0%</span>
+                        <div className="flex flex-col gap-1">
+                            {timeline.map((seg, i) => (
+                                <div key={seg.id} className={`grid grid-cols-[1fr_1fr_1fr_24px] gap-2 py-3 px-6 items-center group rounded-xl transition ${i % 2 !== 0 ? 'bg-white/[0.02]' : ''}`}>
+                                    {/* Time */}
+                                    <div className="flex justify-center">
+                                        <input 
+                                            type="time" 
+                                            value={seg.time}
+                                            onChange={(e) => handleUpdateSegment(seg.id, 'time', e.target.value)}
+                                            className="bg-transparent text-[#97CBFF] font-mono font-bold text-[15px] tracking-wider text-center outline-none w-24 hover:bg-[#2A2732]/50 rounded cursor-text"
+                                        />
+                                    </div>
+                                    
+                                    {/* Status */}
+                                    <div className="flex justify-center">
+                                        <button 
+                                            onClick={() => handleUpdateSegment(seg.id, 'status', seg.status === 'ACTIVE' ? 'OFF' : 'ACTIVE')}
+                                            className={`text-[9px] px-3 py-1 rounded-full font-bold tracking-wider transition-colors ${seg.status === 'ACTIVE' ? 'bg-[#4F95FF]/20 border border-[#4F95FF]/30 text-[#97CBFF]' : 'bg-[#2A2732] text-[#625D71] border border-transparent hover:border-[#625D71]'}`}
+                                        >
+                                            {seg.status}
+                                        </button>
+                                    </div>
+                                    
+                                    {/* Intensity */}
+                                    <div className="flex justify-center items-center">
+                                        <div className="flex items-center gap-1 border border-transparent hover:border-[#2A2732] hover:bg-[#15121C] rounded px-2 w-16 justify-center transition-colors">
+                                            <input 
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={seg.intensity}
+                                                onChange={(e) => handleUpdateSegment(seg.id, 'intensity', parseInt(e.target.value) || 0)}
+                                                className="bg-transparent text-white font-bold text-center text-sm w-8 outline-none hide-arrows"
+                                            />
+                                            <span className="text-white font-bold text-sm">%</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Delete Button */}
+                                    <div className="flex justify-end">
+                                        <button 
+                                            onClick={() => handleRemoveSegment(seg.id)}
+                                            className="text-[#625D71] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all font-bold"
+                                            title="Delete Segment"
+                                        >
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        {/* Row 2 */}
-                        <div className="grid grid-cols-3 py-5 px-6 items-center bg-white/[0.02]">
-                            <span className="text-[#97CBFF] font-mono text-sm tracking-wider">06:00 — 18:00</span>
-                            <div className="flex justify-center">
-                                <span className="bg-[#4F95FF]/20 border border-[#4F95FF]/30 text-[#97CBFF] text-[9px] px-3 py-1 rounded-full font-bold tracking-wider">ACTIVE</span>
-                            </div>
-                            <span className="text-[#97CBFF] font-bold text-right text-sm">100%</span>
-                        </div>
-                        {/* Row 3 */}
-                        <div className="grid grid-cols-3 py-5 px-6 items-center">
-                            <span className="text-[#97CBFF] font-mono text-sm tracking-wider">18:00 — 00:00</span>
-                            <div className="flex justify-center">
-                                <span className="bg-[#2A2732] text-[#625D71] text-[9px] px-3 py-1 rounded-full font-bold tracking-wider">OFF</span>
-                            </div>
-                            <span className="text-white font-bold text-right text-sm">0%</span>
+
+                        {/* Dashed Add Segment Button */}
+                        <div className="px-6 mt-4 relative">
+                            {/* Define styling to hide the number input arrows and style time picker */}
+                            <style dangerouslySetInnerHTML={{__html: `
+                                input[type=number].hide-arrows::-webkit-inner-spin-button, 
+                                input[type=number].hide-arrows::-webkit-outer-spin-button { 
+                                    -webkit-appearance: none; 
+                                    margin: 0; 
+                                }
+                                input[type=number].hide-arrows {
+                                    -moz-appearance: textfield;
+                                }
+                                input[type=time]::-webkit-calendar-picker-indicator {
+                                    filter: invert(1);
+                                    cursor: pointer;
+                                    opacity: 0.7;
+                                }
+                                input[type=time]::-webkit-calendar-picker-indicator:hover {
+                                    opacity: 1;
+                                }
+                            `}} />
+                            <button onClick={handleAddSegment} className="w-full flex items-center justify-center gap-2 text-[#97CBFF] text-[10px] font-bold tracking-widest uppercase hover:bg-white/5 transition border border-dashed border-[#625D71] rounded-[2rem] py-3">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                                Add Segment
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -659,21 +844,47 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                     <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71] mb-8">Spectrum Ratio (B:R:FR:W)</h4>
                     
                     <div className="space-y-6">
-                        <div className="flex justify-between items-center border-b border-[#2A2732] pb-5">
-                            <span className="text-[#4F95FF] text-xs font-bold tracking-wide">Deep Blue (450nm)</span>
-                            <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.blue}%</span>
+                        <div className="pb-1">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-[#4F95FF] text-xs font-bold tracking-wide">Deep Blue (450nm)</span>
+                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.blue}%</span>
+                            </div>
+                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
                         </div>
-                        <div className="flex justify-between items-center border-b border-[#2A2732] pb-5">
-                            <span className="text-[#FF4A4A] text-xs font-bold tracking-wide">Deep Red (660nm)</span>
-                            <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.red}%</span>
+                        <div className="pb-1">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-[#FF4A4A] text-xs font-bold tracking-wide">Deep Red (660nm)</span>
+                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.red}%</span>
+                            </div>
+                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
                         </div>
-                        <div className="flex justify-between items-center border-b border-[#2A2732] pb-5">
-                            <span className="text-[#FF2A85] text-xs font-bold tracking-wide">Far Red (730nm)</span>
-                            <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.farRed}%</span>
+                        <div className="pb-1">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-[#FF2A85] text-xs font-bold tracking-wide">Far Red (730nm)</span>
+                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.farRed}%</span>
+                            </div>
+                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
                         </div>
-                        <div className="flex justify-between items-center border-b border-[#2A2732] pb-5">
-                            <span className="text-[#FFFFFF] text-xs font-bold tracking-wide">Full Spectrum White</span>
-                            <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.white}%</span>
+                        <div className="pb-1">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-[#FFFFFF] text-xs font-bold tracking-wide">Full Spectrum White</span>
+                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.white}%</span>
+                            </div>
+                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between items-center mt-12 pr-4 lg:pr-10">
+                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] leading-snug">LIGHT INTENSITY<br/>(PPFD)</span>
+                        <div className="flex items-center gap-4">
+                            <div className="bg-[#15121C] border border-[#2A2732] rounded-full px-6 py-2 w-28 flex justify-end items-center">
+                                <input 
+                                    className="bg-transparent text-[#97CBFF] font-mono font-bold text-lg w-full text-right outline-none placeholder-[#625D71]"
+                                    value={stage.lightIntensity || ''}
+                                    onChange={(e) => {}}
+                                />
+                            </div>
+                            <span className="text-[#625D71] text-[8px] font-bold tracking-[0.1em] leading-none uppercase">µmol/<br/>m²/s<br/><span className="text-[#4F95FF] tracking-[0.2em] mt-1 inline-block">TARGET</span></span>
                         </div>
                     </div>
                 </div>
@@ -699,21 +910,6 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                             className={`bg-[#15121C] border border-[#2A2732] rounded-lg px-2 py-2 w-16 text-center font-bold text-xs focus:border-[#97CBFF] outline-none transition-colors ${useLeafCount ? 'text-[#97CBFF]' : 'text-[#625D71] opacity-50'}`}
                         />
                     </div>
-                    
-                    <div className="bg-[#15121C] border border-[#2A2732] rounded-full flex p-1">
-                        <button 
-                            onClick={() => onUpdateLogic('logicOperator', 'AND')}
-                            className={`text-[9px] font-bold tracking-widest px-4 py-1.5 rounded-full transition-colors outline-none ${logicOperator === 'AND' ? 'bg-[#97CBFF] text-[#15121B]' : 'text-[#625D71] hover:text-white'}`}
-                        >
-                            AND
-                        </button>
-                        <button 
-                            onClick={() => onUpdateLogic('logicOperator', 'OR')}
-                            className={`text-[9px] font-bold tracking-widest px-4 py-1.5 rounded-full transition-colors outline-none ${logicOperator === 'OR' ? 'bg-[#97CBFF] text-[#15121B]' : 'text-[#625D71] hover:text-white'}`}
-                        >
-                            OR
-                        </button>
-                    </div>
 
                     <div className="flex items-center gap-4">
                         <div 
@@ -733,10 +929,6 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         <span className={`font-bold text-[10px] tracking-widest transition-opacity ${useDiameter ? 'text-[#625D71]' : 'text-[#625D71] opacity-40'}`}>CM</span>
                     </div>
 
-                    <button className="flex items-center gap-3 text-[#625D71] text-[10px] font-bold tracking-widest uppercase hover:text-white transition ml-auto">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-                        Add Logic
-                    </button>
                 </div>
             </div>
         </div>
@@ -754,19 +946,16 @@ function CollapsedStageCard({ stage, index, onExpand, onRemove }) {
                     <h3 className="text-2xl font-bold text-[#625D71] mb-2">{stage.name.split('\n')[0] || 'Vegetative Stage'}</h3>
                     <p className="text-[#625D71]/60 text-xs font-medium mb-10">Expansion of true leaves and biomass accumulation</p>
                     
-                    <div className="border border-dashed border-[#2A2732] rounded-2xl py-6 flex items-center justify-center w-full lg:max-w-md">
+                    <div className="border border-dashed border-[#2A2732] rounded-2xl py-6 flex items-center justify-center w-full lg:max-w-md bg-white/[0.01]">
                         <span className="text-[#625D71] text-[10px] tracking-widest font-bold uppercase">Configuration Active</span>
                     </div>
                 </div>
             </div>
             
             <div className="relative z-10 xl:h-full flex items-center shrink-0 pr-4 gap-4">
-                <button onClick={onExpand} className="flex items-center gap-3 text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase hover:text-white transition py-4 px-6 rounded-full border border-[#97CBFF]/20 hover:bg-[#97CBFF]/10">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                <button onClick={onExpand} className="flex items-center gap-3 text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase hover:text-white transition py-4 px-6 rounded-full hover:bg-white/5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     Modify Parameters
-                </button>
-                <button onClick={onRemove} className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-colors" title="Delete Stage">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
         </div>

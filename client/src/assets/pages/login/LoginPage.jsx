@@ -17,18 +17,45 @@ function LoginPage() {
         setErrorMsg('');
         setIsLoading(true);
 
-        // Simulate API call delay
-        setTimeout(async () => {
-            if (username === 'admin' && password === '1234') {
-                // Set the mocked user context
-                await login({ id: 1, username: 'admin', role: 'admin' });
-                // Navigate to dashboard
+        try {
+            /* --- API CONNECTION COMMENTED OUT ---
+            const response = await fetch('http://192.168.1.116:8080/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (response.ok) {
+                // Assuming successful login returns user data or token
+                // Keeping login context update for the app
+                await login(data.user || { id: 1, username, role: 'admin' });
                 navigate('/');
             } else {
-                setErrorMsg('Invalid username or password (hint: admin / 1234)');
+                // Capture actual error message from server or fallback
+                setErrorMsg(data.error || data.message || 'Invalid username or password');
             }
-            setIsLoading(false);
-        }, 1500);
+            ------------------------------------- */
+
+            // Mock Login
+            setTimeout(async () => {
+                if (username === 'admin' || username.length > 0) {
+                    await login({ id: 1, username, role: 'admin' });
+                    navigate('/');
+                } else {
+                    setErrorMsg('Invalid username or password');
+                }
+            }, 600);
+
+        } catch (error) {
+            setErrorMsg('Connection failed. Please check if the server is running.');
+            console.error('Login error:', error);
+        } finally {
+            setTimeout(() => setIsLoading(false), 600);
+        }
     };
 
     return (
@@ -79,7 +106,6 @@ function LoginPage() {
                     </div>
 
                     <h2 className="text-white text-4xl font-semibold mb-2">AgriSpectraSystem Access</h2>
-                    <p className="text-[#CBC2DC] text-base mb-12">Step 1 of 3: Identity & Authorization</p>
 
                     <form className="flex flex-col" onSubmit={handleLogin}>
                         {errorMsg && (
