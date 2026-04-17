@@ -1,53 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import UserProfile from '../components/UserProfile';
 import agriImage from './login/resources/Agriculture.png';
+import { API_BASE_URL } from '../../config';
 
-const initialProfiles = [
-    {
-        id: 1,
-        name: 'Default Lettuce',
-        species: 'LACTUCA SATIVA L.',
-        stages: [
-            {
-                id: 11,
-                stageLabel: 'STAGE I',
-                name: 'Leaf Development',
-                blue: 20, red: 60, farRed: 10, white: 10,
-                lightIntensity: 65,
-                image: 'https://images.unsplash.com/photo-1622383563227-04401ab4e7ea?q=80&w=400&auto=format&fit=crop'
-            },
-            {
-                id: 12,
-                stageLabel: 'STAGE II',
-                name: 'Vegetative Stage',
-                blue: 10, red: 70, farRed: 0, white: 20,
-                lightIntensity: 85,
-                image: 'https://images.unsplash.com/photo-1622383563227-04401ab4e7ea?q=80&w=400&auto=format&fit=crop'
-            }
-        ]
-    },
-    {
-        id: 2,
-        name: 'Compact Growth',
-        species: 'LACTUCA SATIVA L.',
-        stages: [
-            {
-                id: 21,
-                stageLabel: 'STAGE I',
-                name: 'Seedling\n(BBCH00-09)',
-                blue: 30, red: 50, farRed: 5, white: 15,
-                lightIntensity: 50,
-                image: 'https://images.unsplash.com/photo-1622383563227-04401ab4e7ea?q=80&w=400&auto=format&fit=crop'
-            }
-        ]
-    },
-    {
-        id: 3,
-        name: 'Experimental Recipe',
-        species: 'LACTUCA SATIVA L.',
-        stages: []
-    }
-];
 // Helper to calculate total ratio correctly
 const normalizeRatios = (b, r, fr, w) => {
     return { b, r, fr, w }; // Returning raw values, adjusting them separately in logic if needed
@@ -60,7 +15,7 @@ export default function Recipes() {
         if (saved) {
             try { return JSON.parse(saved); } catch (e) { console.error('Failed to parse profiles', e); }
         }
-        return initialProfiles;
+        return [];
     });
 
     const [activeProfileId, setActiveProfileId] = useState(() => {
@@ -68,7 +23,7 @@ export default function Recipes() {
         if (saved) {
             try { return JSON.parse(saved); } catch (e) { console.error('Failed to parse active profile', e); }
         }
-        return initialProfiles[0].id;
+        return null;
     });
 
     const [deployedProfileId, setDeployedProfileId] = useState(() => {
@@ -103,38 +58,96 @@ export default function Recipes() {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    // Fetch profiles from server on load
-    useEffect(() => {
-        const fetchProfiles = async () => {
+    // Fetch profiles from server
+    const fetchProfiles = async () => {
             setIsLoading(true);
             try {
-                // Adjust endpoint name to whatever the backend uses for getting profiles
-                /* --- API CONNECTION COMMENTED OUT ---
-                const response = await fetch('http://192.168.1.116:8080/recipes'); 
+                const token = localStorage.getItem('token');
+                const response = await fetch(`${API_BASE_URL}/api/light-profiles`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }); 
                 if (response.ok) {
                     const data = await response.json();
+                    
+                    let profilesArray = [];
                     if (Array.isArray(data)) {
-                        setProfiles(data);
+                        profilesArray = data;
                     } else if (data.profiles && Array.isArray(data.profiles)) {
-                        setProfiles(data.profiles);
-                    } else if (typeof data === 'object') {
-                        // Fallback mapping if backend returns an object map format instead of list
-                        const mappedProfiles = Object.keys(data).map((key, i) => ({
-                            id: data[key].id || (i + 1),
-                            name: data[key].name || key,
-                            species: data[key].species || 'IMPORTED',
-                            stages: data[key].stages || Object.values(data[key])
-                        }));
-                        if (mappedProfiles.length > 0) setProfiles(mappedProfiles);
+                        profilesArray = data.profiles;
                     }
+                    
+                    if (profilesArray.length > 0) {
+                        const mappedProfiles = profilesArray.map(p => {
+                            let stagesArray = [];
+                            
+                            // Check if stages is stored as a map from the go DB JSON datatype
+                            if (p.stages && !Array.isArray(p.stages)) {
+                                Object.keys(p.stages).forEach(key => {
+                                    if (key.startsWith('stage-')) {
+                                        let rawStage = p.stages[key];
+                                        let timeline = [];
+                                        
+                                        // reverse map period back to timeline array
+                                        if (rawStage.period) {
+                                            let tid = 1;
+                                            for (const [timeKey, intensityStr] of Object.entries(rawStage.period)) {
+                                                const intensity = parseInt(intensityStr) || 0;
+                                                timeline.push({ 
+                                                    id: tid++, 
+                                                    time: timeKey, 
+                                                    status: intensity > 0 ? 'ACTIVE' : 'OFF', 
+                                                    intensity 
+                                                });
+                                            }
+                                        }
+                                        
+                                        const stageId = parseInt(key.replace('stage-', ''));
+                                        stagesArray.push({
+                                            id: stageId,
+                                            stageLabel: `STAGE ${stageId}`,
+                                            name: `Imported Stage ${stageId}`,
+                                            red: rawStage.red || 0,
+                                            farRed: rawStage.farRed || 0,
+                                            blue: rawStage.blue || 0,
+                                            white: rawStage.white || 0,
+                                            leafCount: rawStage.leaf || 8,
+                                            useLeafCount: rawStage.leaf !== null,
+                                            diameter: rawStage.leaf_density || 12,
+                                            useDiameter: rawStage.leaf_density !== null,
+                                            lightIntensity: rawStage.ppfd || 0,
+                                            timeline: timeline.length > 0 ? timeline : undefined
+                                        });
+                                    }
+                                });
+                            } else if (Array.isArray(p.stages)) {
+                                stagesArray = p.stages;
+                            }
+                            
+                            return {
+                                id: p.profile_id || p.id || Math.floor(Date.now() + Math.random() * 10000),
+                                name: p.profile_name || p.name || 'Unnamed Profile',
+                                species: p.species || 'PLANT DB', // Go backend doesn't store species yet
+                                stages: stagesArray
+                            };
+                        });
+                        setProfiles(mappedProfiles);
+                    } else {
+                        // DB empty, fallback to empty array
+                        setProfiles([]);
+                    }
+                } else if (response.status === 401) {
+                    console.warn('Unauthorized to fetch profiles. Please login first.');
                 }
-                ------------------------------------- */
             } catch (error) {
                 console.warn('Could not fetch profiles from backend, falling back to local storage', error);
             } finally {
                 setIsLoading(false);
             }
-        };
+    };
+
+    useEffect(() => {
         fetchProfiles();
     }, []);
 
@@ -164,11 +177,42 @@ export default function Recipes() {
         setProfilesSnapshot(null);
     };
 
-    const handleSaveChanges = () => {
+    const handleSaveChanges = async () => {
         if (activeProfile) {
+            // Check for duplicate name (case-insensitive)
+            const isDuplicate = profiles.some(p => 
+                p.name.trim().toLowerCase() === activeProfile.name.trim().toLowerCase() && 
+                p.id !== activeProfile.id
+            );
+            if (isDuplicate) {
+                alert("ชื่อ Profile นี้มีอยู่ในระบบแล้ว กรุณาตั้งชื่อใหม่");
+                return;
+            }
+
             const payload = buildProfilePayload(activeProfile);
             console.log("Saved Recipe JSON:", JSON.stringify(payload, null, 2));
-            alert("Recipe Saved! Check the browser console to see the JSON payload.");
+            
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch(`${API_BASE_URL}/api/light-profiles`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (response.ok) {
+                    alert("Recipe Saved to Database successfully!");
+                    await fetchProfiles(); // Real-time reload
+                } else {
+                    alert("Failed to save recipe to database. (Status: " + response.status + ")");
+                }
+            } catch (error) {
+                console.error("Error saving profile to DB:", error);
+                alert("Network error saving profile to Database.");
+            }
         }
         setIsEditingProfile(false);
         setProfilesSnapshot(null);
@@ -178,6 +222,7 @@ export default function Recipes() {
         if (!profile) return null;
         
         const payload = {
+            profile_id: profile.id,
             profile_name: profile.name
         };
         
@@ -219,14 +264,38 @@ export default function Recipes() {
         }
     }, [profiles.length]); // Added dependency on profiles.length so it prints on changes like adding/removing profiles too.
 
-    const handleRemoveProfile = (id, e) => {
+    const handleRemoveProfile = async (id, e) => {
         e.stopPropagation();
-        const updated = profiles.filter(p => p.id !== id);
-        setProfiles(updated);
-        if (activeProfileId === id && updated.length > 0) {
-            setActiveProfileId(updated[0].id);
-        } else if (updated.length === 0) {
-            setActiveProfileId(null);
+        
+        if (!window.confirm('คุณต้องการจะลบ Profile นี้ทิ้งอย่างถาวรใช่หรือไม่? (Are you sure you want to delete this profile?)')) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_BASE_URL}/api/light-profiles/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const updated = profiles.filter(p => p.id !== id);
+                setProfiles(updated);
+                if (activeProfileId === id && updated.length > 0) {
+                    setActiveProfileId(updated[0].id);
+                } else if (updated.length === 0) {
+                    setActiveProfileId(null);
+                }
+                await fetchProfiles();
+                alert('ลบ Profile ออกจากระบบเรียบร้อยแล้ว');
+            } else {
+                alert(`เกิดข้อผิดพลาดในการลบ Profile จากฐานข้อมูล (Status: ${response.status})`);
+            }
+        } catch (error) {
+            console.error("Error deleting profile:", error);
+            alert("ไม่สามารถเชื่อมต่อเพื่อลบ Profile ได้");
         }
     };
 
@@ -290,6 +359,7 @@ export default function Recipes() {
         }));
     };
 
+
     const handleUpdateStageLogic = (profileId, stageId, key, value) => {
         setProfiles(profiles.map(p => {
             if (p.id !== profileId) return p;
@@ -322,7 +392,7 @@ export default function Recipes() {
             console.log("Sending recipe payload to server:", payload);
             
             /* --- API CONNECTION COMMENTED OUT ---
-            const response = await fetch('http://192.168.1.116:8080/deploy', {
+            const response = await fetch(`${API_BASE_URL}/deploy`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -374,6 +444,7 @@ export default function Recipes() {
                     profile={activeProfile} 
                     onDiscard={handleDiscardChanges}
                     onSave={handleSaveChanges}
+                    onUpdateProfileName={(newName) => handleUpdateProfileName(activeProfile.id, newName)}
                     onAddStage={() => handleAddStage(activeProfile.id)}
                     onUpdateStageName={(stageId, newName) => handleUpdateStageName(activeProfile.id, stageId, newName)}
                     onRemoveStage={(stageId) => handleRemoveStage(activeProfile.id, stageId)}
@@ -620,12 +691,23 @@ function SliderRow({ label, value, color, onChange, thumbClass }) {
 
 // --- NEW EDITOR COMPONENTS ---
 
-function RecipeEditor({ profile, onDiscard, onSave, onAddStage, onUpdateStageName, onRemoveStage, onUpdateLogic }) {
+function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddStage, onUpdateStageName, onRemoveStage, onUpdateLogic }) {
     // If the profile has stages, expand the first one, otherwise null
     const [expandedStageId, setExpandedStageId] = useState(profile.stages.length > 0 ? profile.stages[0].id : null);
 
     return (
         <>
+            {/* Editable Profile Name */}
+            <div className="px-8 lg:px-12 pb-4 flex items-center shrink-0">
+                <input 
+                    type="text"
+                    value={profile.name}
+                    onChange={(e) => onUpdateProfileName(e.target.value)}
+                    className="text-3xl font-bold bg-transparent text-white border-b-2 border-transparent hover:border-[#2A2732] focus:border-[#97CBFF] outline-none px-2 py-1 -ml-2 transition-colors w-full max-w-md"
+                    placeholder="Enter Profile Name..."
+                />
+            </div>
+
             <div className="px-8 lg:px-12 pb-6 flex-1 overflow-y-auto shrink-0 space-y-6">
                 {profile.stages.length > 0 ? (
                     profile.stages.map((stage, idx) => (
@@ -844,34 +926,34 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                     <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71] mb-8">Spectrum Ratio (B:R:FR:W)</h4>
                     
                     <div className="space-y-6">
-                        <div className="pb-1">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-[#4F95FF] text-xs font-bold tracking-wide">Deep Blue (450nm)</span>
-                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.blue}%</span>
-                            </div>
-                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
-                        </div>
-                        <div className="pb-1">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-[#FF4A4A] text-xs font-bold tracking-wide">Deep Red (660nm)</span>
-                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.red}%</span>
-                            </div>
-                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
-                        </div>
-                        <div className="pb-1">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-[#FF2A85] text-xs font-bold tracking-wide">Far Red (730nm)</span>
-                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.farRed}%</span>
-                            </div>
-                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
-                        </div>
-                        <div className="pb-1">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-[#FFFFFF] text-xs font-bold tracking-wide">Full Spectrum White</span>
-                                <span className="text-white text-xs font-bold font-mono text-right w-10">{stage.white}%</span>
-                            </div>
-                            <div className="w-full bg-[#15121C] rounded-full h-1.5 border border-[#2A2732]"></div>
-                        </div>
+                        <SliderRow 
+                            label="Deep Blue (450nm)" 
+                            value={stage.blue} 
+                            color="#4F95FF" 
+                            thumbClass="thumb-blue" 
+                            onChange={(e) => onUpdateLogic('blue', e.target.value)} 
+                        />
+                        <SliderRow 
+                            label="Deep Red (660nm)" 
+                            value={stage.red} 
+                            color="#FF4A4A" 
+                            thumbClass="thumb-red" 
+                            onChange={(e) => onUpdateLogic('red', e.target.value)} 
+                        />
+                        <SliderRow 
+                            label="Far Red (730nm)" 
+                            value={stage.farRed} 
+                            color="#FF2A85" 
+                            thumbClass="thumb-pink" 
+                            onChange={(e) => onUpdateLogic('farRed', e.target.value)} 
+                        />
+                        <SliderRow 
+                            label="Full Spectrum White" 
+                            value={stage.white} 
+                            color="#FFFFFF" 
+                            thumbClass="thumb-white" 
+                            onChange={(e) => onUpdateLogic('white', e.target.value)} 
+                        />
                     </div>
 
                     <div className="flex justify-between items-center mt-12 pr-4 lg:pr-10">
@@ -879,9 +961,11 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         <div className="flex items-center gap-4">
                             <div className="bg-[#15121C] border border-[#2A2732] rounded-full px-6 py-2 w-28 flex justify-end items-center">
                                 <input 
-                                    className="bg-transparent text-[#97CBFF] font-mono font-bold text-lg w-full text-right outline-none placeholder-[#625D71]"
+                                    type="number"
+                                    min="0"
+                                    className="bg-transparent text-[#97CBFF] font-mono font-bold text-lg w-full text-right outline-none placeholder-[#625D71] hide-arrows"
                                     value={stage.lightIntensity || ''}
-                                    onChange={(e) => {}}
+                                    onChange={(e) => onUpdateLogic('lightIntensity', parseInt(e.target.value) || 0)}
                                 />
                             </div>
                             <span className="text-[#625D71] text-[8px] font-bold tracking-[0.1em] leading-none uppercase">µmol/<br/>m²/s<br/><span className="text-[#4F95FF] tracking-[0.2em] mt-1 inline-block">TARGET</span></span>

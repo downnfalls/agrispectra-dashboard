@@ -45,10 +45,6 @@ const UserProfile = () => {
                     </div>
                     
                     <div className="flex flex-col gap-2 border-t border-[#2A2732] pt-4">
-                        <button className="flex items-center gap-4 text-[#CBC2DC] hover:text-white hover:bg-[#1A151E] px-4 py-3 rounded-xl transition-colors w-full text-left">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            <span className="font-bold text-[9px] uppercase tracking-widest mt-0.5">Activity Log</span>
-                        </button>
                         <button 
                             className="flex items-center gap-4 text-[#F43F5E] hover:text-red-400 hover:bg-red-500/10 px-4 py-3 rounded-xl transition-colors w-full text-left"
                             onClick={handleLogout}

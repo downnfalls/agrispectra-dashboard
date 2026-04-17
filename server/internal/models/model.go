@@ -15,24 +15,24 @@ type Log struct {
 }
 
 type LightProfile struct {
-	ProfileID   int            `json:"profile_id" Gorm:"primaryKey"`
+	ProfileID   int            `json:"profile_id" gorm:"primaryKey"`
 	ProfileName string         `json:"profile_name"`
 	Stages      datatypes.JSON `json:"stages"`
 }
 
 type PowerConsumption struct {
-	ID        uint      `Gorm:"primaryKey" json:"id"`
+	ID        uint      `gorm:"primaryKey" json:"id"`
 	Timestamp time.Time `json:"timestamp"`
 	Power     float64   `json:"power"`
 }
 
 type User struct {
-	Username string `json:"username" Gorm:"primaryKey"`
+	Username string `json:"username" gorm:"primaryKey"`
 	Password string `json:"password"`
 }
 
 type Token struct {
-	Username     string `json:"username" Gorm:"primaryKey"`
+	Username     string `json:"username" gorm:"primaryKey"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }

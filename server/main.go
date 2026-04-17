@@ -37,10 +37,15 @@ func main() {
 		return
 	}
 
+	// 1. กำหนด Repositories
 	userRepo := repository.NewUserRepo(db)
 	logRepo := repository.NewLogRepo(db)
+	lightProfileRepo := repository.NewLightProfileRepo(db) // เพิ่มบรรทัดนี้
+
+	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
+	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo) // เพิ่มบรรทัดนี้
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -59,10 +64,14 @@ func main() {
 	}
 
 	apiGroup := r.Group("/api")
-	apiGroup.Use(middleware.AuthMiddleware())
+	apiGroup.Use(middleware.AuthMiddleware()) // ต้องการ Token
 	{
 		apiGroup.POST("/logs", logHandler.CreateLog)
 		apiGroup.POST("/power", logHandler.CreatePowerConsumption)
+		// 3. เพิ่ม Endpoint ใหม่
+		apiGroup.POST("/light-profiles", lightProfileHandler.CreateLightProfile)
+		apiGroup.GET("/light-profiles", lightProfileHandler.GetLightProfiles) // GET สำหรับหน้ารับสูตรไฟ
+		apiGroup.DELETE("/light-profiles/:id", lightProfileHandler.DeleteLightProfile) // DELETE สำหรับลบสูตรไฟ
 	}
 
 	fmt.Println("🚀 Pfal Server is running on http://localhost:8080")

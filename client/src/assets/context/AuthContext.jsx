@@ -7,32 +7,37 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    const [token, setToken] = useState(null);
+
     useEffect(() => {
         const checkAuth = async () => {
-            // Mock auth check using localStorage
-            const storedUser = localStorage.getItem('mockUser');
-            if (storedUser) {
+            const storedUser = localStorage.getItem('user');
+            const storedToken = localStorage.getItem('token');
+            if (storedUser && storedToken) {
                 setUser(JSON.parse(storedUser));
+                setToken(storedToken);
             }
             setLoading(false);
         };
         checkAuth();
     }, []);
 
-    const login = async (userData) => {
-        // Mock login
+    const login = async (userData, authToken) => {
         setUser(userData);
-        localStorage.setItem('mockUser', JSON.stringify(userData));
+        setToken(authToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', authToken);
     };
 
     const logout = async () => {
-        // Mock logout
         setUser(null);
-        localStorage.removeItem('mockUser');
+        setToken(null);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );
