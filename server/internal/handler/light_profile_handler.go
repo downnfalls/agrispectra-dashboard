@@ -12,11 +12,15 @@ import (
 )
 
 type LightProfileHandler struct {
-	repo *repository.LightProfileRepo
+	repo            *repository.LightProfileRepo
+	hardwareHandler *HardwareHandler
 }
 
-func NewLightProfileHandler(repo *repository.LightProfileRepo) *LightProfileHandler {
-	return &LightProfileHandler{repo: repo}
+func NewLightProfileHandler(repo *repository.LightProfileRepo, hw *HardwareHandler) *LightProfileHandler {
+	return &LightProfileHandler{
+		repo:            repo,
+		hardwareHandler: hw,
+	}
 }
 
 func (h *LightProfileHandler) CreateLightProfile(c *gin.Context) {
@@ -117,4 +121,22 @@ func (h *LightProfileHandler) DeleteLightProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "ลบ Light Profile สำเร็จ"})
+}
+
+func (h *LightProfileHandler) DeployProfile(c *gin.Context) {
+	var payload map[string]interface{}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
+		return
+	}
+
+	// 1. ดึงชื่อ Profile
+	profileName, _ := payload["profile_name"].(string)
+
+	// 2. ส่งข้อมูลทั้ง Payload (สูตรไฟ) ไปยัง ESP32 ผ่าน WebSocket ของจริง
+	h.hardwareHandler.SendCommand(payload)
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Profile " + profileName + " deployed to hardware successfully",
+	})
 }

@@ -45,7 +45,11 @@ func main() {
 	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
-	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo) // เพิ่มบรรทัดนี้
+	hardwareHandler := handler.NewHardwareHandler()
+	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler)
+
+	// เริ่มต้นระบบ Broadcast
+	go hardwareHandler.HandleMessages()
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -57,21 +61,27 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	authGroup := r.Group("/auth")
-	{
-		authGroup.POST("/register", authHandler.Register)
-		authGroup.POST("/login", authHandler.Login)
-	}
+	r.POST("/auth/register", authHandler.Register)
+	r.POST("/auth/login", authHandler.Login)
 
 	apiGroup := r.Group("/api")
-	apiGroup.Use(middleware.AuthMiddleware()) // ต้องการ Token
+	apiGroup.Use(middleware.AuthMiddleware())
 	{
 		apiGroup.POST("/logs", logHandler.CreateLog)
 		apiGroup.POST("/power", logHandler.CreatePowerConsumption)
-		// 3. เพิ่ม Endpoint ใหม่
 		apiGroup.POST("/light-profiles", lightProfileHandler.CreateLightProfile)
-		apiGroup.GET("/light-profiles", lightProfileHandler.GetLightProfiles) // GET สำหรับหน้ารับสูตรไฟ
-		apiGroup.DELETE("/light-profiles/:id", lightProfileHandler.DeleteLightProfile) // DELETE สำหรับลบสูตรไฟ
+		apiGroup.GET("/light-profiles", lightProfileHandler.GetLightProfiles)
+		apiGroup.DELETE("/light-profiles/:id", lightProfileHandler.DeleteLightProfile)
+		apiGroup.POST("/deploy", lightProfileHandler.DeployProfile)
+		apiGroup.GET("/hardware/state", hardwareHandler.GetState)
+		apiGroup.POST("/hardware/stop", hardwareHandler.EmergencyStop) // ปุ่ม Emergency Stop
+	}
+
+	hardwareGroup := r.Group("/hardware")
+	{
+		hardwareGroup.POST("/state", hardwareHandler.UpdateState)
+		hardwareGroup.GET("/ws", hardwareHandler.ConnectWebSocket)
+		hardwareGroup.GET("/command", hardwareHandler.ConnectCommandWS) // สำหรับ ESP32 Connect มาฟังคำสั่ง
 	}
 
 	fmt.Println("🚀 Pfal Server is running on http://localhost:8080")

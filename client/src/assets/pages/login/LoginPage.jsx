@@ -47,8 +47,8 @@ function LoginPage() {
     };
 
     return (
-        <div className="bg-[#1D1A24] min-h-screen w-full flex flex-row">
-            <div className="bg-[#15121C] relative w-150 overflow-hidden">
+        <div className="bg-[#0A0A0A] min-h-screen w-full flex flex-row">
+            <div className="bg-[#0A0A0A] relative w-150 overflow-hidden">
                 <div 
                     className="absolute w-full h-full bg-linear-to-br 
                         from-[#97CBFF33] 
@@ -85,10 +85,11 @@ function LoginPage() {
                     </div>
                     <p className='text-[#625D71] font-medium text-xs'>© 2026 JANGKOPF TEAM. ALL RIGHTS RESERVED.</p>
                 </div>
+                <div className="absolute right-0 top-0 bottom-0 w-px bg-[#222]"></div>
             </div>
-            <div className="flex-1 relative flex flex-col justify-center px-16 lg:px-32 xl:px-48">
+            <div className="flex-1 relative flex flex-col justify-center px-16 lg:px-32 xl:px-48 bg-[#0A0A0A]">
                 <div className="max-w-md w-full">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2A2732] border border-[#3E3A4B] mb-8">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#111] border border-[#222] mb-8">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#97CBFF]"></div>
                         <span className="text-[#F472B6] text-[10px] font-bold tracking-widest uppercase">New Personnel Enrollment</span>
                     </div>
@@ -108,7 +109,7 @@ function LoginPage() {
                                 placeholder="USERNAME" 
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="w-full bg-[#2A2732] text-white placeholder-[#625D71] rounded-xl px-5 py-4 outline-none border border-transparent focus:border-[#97CBFF] transition-colors"
+                                className="w-full bg-[#111] text-white placeholder-[#625D71] rounded-xl px-5 py-4 outline-none border border-[#222] focus:border-[#97CBFF] transition-colors"
                                 required
                             />
                         </div>
@@ -127,7 +128,7 @@ function LoginPage() {
                                     placeholder="••••••••••••" 
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-[#2A2732] text-white placeholder-[#625D71] rounded-xl pl-12 pr-5 py-4 outline-none border border-transparent focus:border-[#97CBFF] transition-colors"
+                                    className="w-full bg-[#111] text-white placeholder-[#625D71] rounded-xl pl-12 pr-5 py-4 outline-none border border-[#222] focus:border-[#97CBFF] transition-colors"
                                     required
                                 />
                             </div>

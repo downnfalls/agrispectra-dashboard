@@ -60,91 +60,91 @@ export default function Recipes() {
 
     // Fetch profiles from server
     const fetchProfiles = async () => {
-            setIsLoading(true);
-            try {
-                const token = localStorage.getItem('token');
-                const response = await fetch(`${API_BASE_URL}/api/light-profiles`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }); 
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    let profilesArray = [];
-                    if (Array.isArray(data)) {
-                        profilesArray = data;
-                    } else if (data.profiles && Array.isArray(data.profiles)) {
-                        profilesArray = data.profiles;
-                    }
-                    
-                    if (profilesArray.length > 0) {
-                        const mappedProfiles = profilesArray.map(p => {
-                            let stagesArray = [];
-                            
-                            // Check if stages is stored as a map from the go DB JSON datatype
-                            if (p.stages && !Array.isArray(p.stages)) {
-                                Object.keys(p.stages).forEach(key => {
-                                    if (key.startsWith('stage-')) {
-                                        let rawStage = p.stages[key];
-                                        let timeline = [];
-                                        
-                                        // reverse map period back to timeline array
-                                        if (rawStage.period) {
-                                            let tid = 1;
-                                            for (const [timeKey, intensityStr] of Object.entries(rawStage.period)) {
-                                                const intensity = parseInt(intensityStr) || 0;
-                                                timeline.push({ 
-                                                    id: tid++, 
-                                                    time: timeKey, 
-                                                    status: intensity > 0 ? 'ACTIVE' : 'OFF', 
-                                                    intensity 
-                                                });
-                                            }
-                                        }
-                                        
-                                        const stageId = parseInt(key.replace('stage-', ''));
-                                        stagesArray.push({
-                                            id: stageId,
-                                            stageLabel: `STAGE ${stageId}`,
-                                            name: `Imported Stage ${stageId}`,
-                                            red: rawStage.red || 0,
-                                            farRed: rawStage.farRed || 0,
-                                            blue: rawStage.blue || 0,
-                                            white: rawStage.white || 0,
-                                            leafCount: rawStage.leaf || 8,
-                                            useLeafCount: rawStage.leaf !== null,
-                                            diameter: rawStage.leaf_density || 12,
-                                            useDiameter: rawStage.leaf_density !== null,
-                                            lightIntensity: rawStage.ppfd || 0,
-                                            timeline: timeline.length > 0 ? timeline : undefined
-                                        });
-                                    }
-                                });
-                            } else if (Array.isArray(p.stages)) {
-                                stagesArray = p.stages;
-                            }
-                            
-                            return {
-                                id: p.profile_id || p.id || Math.floor(Date.now() + Math.random() * 10000),
-                                name: p.profile_name || p.name || 'Unnamed Profile',
-                                species: p.species || 'PLANT DB', // Go backend doesn't store species yet
-                                stages: stagesArray
-                            };
-                        });
-                        setProfiles(mappedProfiles);
-                    } else {
-                        // DB empty, fallback to empty array
-                        setProfiles([]);
-                    }
-                } else if (response.status === 401) {
-                    console.warn('Unauthorized to fetch profiles. Please login first.');
+        setIsLoading(true);
+        try {
+            const token = sessionStorage.getItem('token');
+            const response = await fetch(`${API_BASE_URL}/api/light-profiles`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
                 }
-            } catch (error) {
-                console.warn('Could not fetch profiles from backend, falling back to local storage', error);
-            } finally {
-                setIsLoading(false);
+            });
+            if (response.ok) {
+                const data = await response.json();
+
+                let profilesArray = [];
+                if (Array.isArray(data)) {
+                    profilesArray = data;
+                } else if (data.profiles && Array.isArray(data.profiles)) {
+                    profilesArray = data.profiles;
+                }
+
+                if (profilesArray.length > 0) {
+                    const mappedProfiles = profilesArray.map(p => {
+                        let stagesArray = [];
+
+                        // Check if stages is stored as a map from the go DB JSON datatype
+                        if (p.stages && !Array.isArray(p.stages)) {
+                            Object.keys(p.stages).forEach(key => {
+                                if (key.startsWith('stage-')) {
+                                    let rawStage = p.stages[key];
+                                    let timeline = [];
+
+                                    // reverse map period back to timeline array
+                                    if (rawStage.period) {
+                                        let tid = 1;
+                                        for (const [timeKey, intensityStr] of Object.entries(rawStage.period)) {
+                                            const intensity = parseInt(intensityStr) || 0;
+                                            timeline.push({
+                                                id: tid++,
+                                                time: timeKey,
+                                                status: intensity > 0 ? 'ACTIVE' : 'OFF',
+                                                intensity
+                                            });
+                                        }
+                                    }
+
+                                    const stageId = parseInt(key.replace('stage-', ''));
+                                    stagesArray.push({
+                                        id: stageId,
+                                        stageLabel: `STAGE ${stageId}`,
+                                        name: `Imported Stage ${stageId}`,
+                                        red: rawStage.red || 0,
+                                        farRed: rawStage.farRed || 0,
+                                        blue: rawStage.blue || 0,
+                                        white: rawStage.white || 0,
+                                        leafCount: rawStage.leaf || 8,
+                                        useLeafCount: rawStage.leaf !== null,
+                                        diameter: rawStage.leaf_density || 12,
+                                        useDiameter: rawStage.leaf_density !== null,
+                                        lightIntensity: rawStage.ppfd || 0,
+                                        timeline: timeline.length > 0 ? timeline : undefined
+                                    });
+                                }
+                            });
+                        } else if (Array.isArray(p.stages)) {
+                            stagesArray = p.stages;
+                        }
+
+                        return {
+                            id: p.profile_id || p.id || Math.floor(Date.now() + Math.random() * 10000),
+                            name: p.profile_name || p.name || 'Unnamed Profile',
+                            species: p.species || 'PLANT DB', // Go backend doesn't store species yet
+                            stages: stagesArray
+                        };
+                    });
+                    setProfiles(mappedProfiles);
+                } else {
+                    // DB empty, fallback to empty array
+                    setProfiles([]);
+                }
+            } else if (response.status === 401) {
+                console.warn('Unauthorized to fetch profiles. Please login first.');
             }
+        } catch (error) {
+            console.warn('Could not fetch profiles from backend, falling back to local storage', error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -180,8 +180,8 @@ export default function Recipes() {
     const handleSaveChanges = async () => {
         if (activeProfile) {
             // Check for duplicate name (case-insensitive)
-            const isDuplicate = profiles.some(p => 
-                p.name.trim().toLowerCase() === activeProfile.name.trim().toLowerCase() && 
+            const isDuplicate = profiles.some(p =>
+                p.name.trim().toLowerCase() === activeProfile.name.trim().toLowerCase() &&
                 p.id !== activeProfile.id
             );
             if (isDuplicate) {
@@ -191,9 +191,9 @@ export default function Recipes() {
 
             const payload = buildProfilePayload(activeProfile);
             console.log("Saved Recipe JSON:", JSON.stringify(payload, null, 2));
-            
+
             try {
-                const token = localStorage.getItem('token');
+                const token = sessionStorage.getItem('token');
                 const response = await fetch(`${API_BASE_URL}/api/light-profiles`, {
                     method: 'POST',
                     headers: {
@@ -202,7 +202,7 @@ export default function Recipes() {
                     },
                     body: JSON.stringify(payload)
                 });
-                
+
                 if (response.ok) {
                     alert("Recipe Saved to Database successfully!");
                     await fetchProfiles(); // Real-time reload
@@ -220,15 +220,15 @@ export default function Recipes() {
 
     const buildProfilePayload = (profile) => {
         if (!profile) return null;
-        
+
         const payload = {
             profile_id: profile.id,
             profile_name: profile.name
         };
-        
+
         profile.stages.forEach((stage, index) => {
             const stageKey = `stage-${index + 1}`;
-            
+
             const period = {};
             const timeline = stage.timeline || [
                 { id: 1, time: '00:00', status: 'OFF', intensity: 0 },
@@ -238,7 +238,7 @@ export default function Recipes() {
             timeline.forEach(seg => {
                 period[seg.time] = seg.status === 'ACTIVE' ? (parseInt(seg.intensity) || 0) : 0;
             });
-            
+
             payload[stageKey] = {
                 red: parseInt(stage.red) || 0,
                 farRed: parseInt(stage.farRed) || 0,
@@ -266,13 +266,13 @@ export default function Recipes() {
 
     const handleRemoveProfile = async (id, e) => {
         e.stopPropagation();
-        
+
         if (!window.confirm('คุณต้องการจะลบ Profile นี้ทิ้งอย่างถาวรใช่หรือไม่? (Are you sure you want to delete this profile?)')) {
             return;
         }
 
         try {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             const response = await fetch(`${API_BASE_URL}/api/light-profiles/${id}`, {
                 method: 'DELETE',
                 headers: {
@@ -315,11 +315,11 @@ export default function Recipes() {
     const handleAddStage = (profileId) => {
         setProfiles(profiles.map(p => {
             if (p.id !== profileId) return p;
-            
+
             // Generate roman numeral for stage label
             const num = p.stages.length + 1;
             const romanLabel = num === 1 ? 'I' : num === 2 ? 'II' : num === 3 ? 'III' : num === 4 ? 'IV' : 'V';
-            
+
             const newStage = {
                 id: Date.now(),
                 stageLabel: `STAGE ${romanLabel}`,
@@ -328,7 +328,7 @@ export default function Recipes() {
                 lightIntensity: 60,
                 image: 'https://images.unsplash.com/photo-1622383563227-04401ab4e7ea?q=80&w=400&auto=format&fit=crop'
             };
-            
+
             return {
                 ...p,
                 stages: [...p.stages, newStage]
@@ -385,34 +385,36 @@ export default function Recipes() {
     const [isDeploying, setIsDeploying] = useState(false);
     const handleDeployProfile = async () => {
         if (!activeProfile) return;
-        
+
         setIsDeploying(true);
         try {
             const payload = buildProfilePayload(activeProfile);
             console.log("Sending recipe payload to server:", payload);
-            
-            /* --- API CONNECTION COMMENTED OUT ---
-            const response = await fetch(`${API_BASE_URL}/deploy`, {
+
+            const token = sessionStorage.getItem('token');
+            const response = await fetch(`${API_BASE_URL}/api/deploy`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify(payload)
             });
             
             if (!response.ok) {
                 console.warn('Backend rejected the recipe payload. Ensure backend is running and endpoint matches.');
+                const errData = await response.json().catch(() => ({}));
+                console.error("Deploy Error:", errData);
             } else {
-                console.log('Recipe deployed successfully to hardware.');
+                console.log('Recipe deployed successfully to backend/hardware.');
             }
-            ------------------------------------- */
-            
+
             // Set as deployed once success alert finishes (mock)
             setTimeout(() => {
                 setDeployedProfileId(activeProfile.id);
                 alert('Mock: Recipe deployed successfully to hardware!\nPayload viewable in console.');
             }, 500);
-            
+
         } catch (error) {
             console.error('Network error deploying profile to backend:', error);
         } finally {
@@ -421,8 +423,8 @@ export default function Recipes() {
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#15121B] text-white overflow-y-auto">
-            
+        <div className="flex flex-col h-full bg-[#0A0A0A] text-white overflow-y-auto">
+
             {/* Header */}
             <header className="px-8 lg:px-12 pt-8 pb-6 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-8">
@@ -430,7 +432,7 @@ export default function Recipes() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <div className="bg-[#15121C] rounded-full px-4 py-2 flex items-center gap-3 border border-[#2A2732]">
+                    <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
                         <div className="w-2 h-2 rounded-full bg-[#34D399] shadow-[0_0_8px_#34D399]"></div>
                         <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM ONLINE</span>
                     </div>
@@ -440,8 +442,8 @@ export default function Recipes() {
 
             {/* Editor vs View Conditional */}
             {isEditingProfile && activeProfile ? (
-                <RecipeEditor 
-                    profile={activeProfile} 
+                <RecipeEditor
+                    profile={activeProfile}
                     onDiscard={handleDiscardChanges}
                     onSave={handleSaveChanges}
                     onUpdateProfileName={(newName) => handleUpdateProfileName(activeProfile.id, newName)}
@@ -452,113 +454,112 @@ export default function Recipes() {
                 />
             ) : (
                 <>
-            {/* Profile Selection Pills */}
-            <div className="px-8 lg:px-12 pb-6 flex flex-wrap gap-4 shrink-0">
-                {profiles.map(profile => {
-                    const isActive = activeProfileId === profile.id;
-                    return (
-                        <div 
-                            key={profile.id}
-                            onClick={() => setActiveProfileId(profile.id)}
-                            className={`group relative flex flex-col justify-center px-5 py-3 rounded-2xl border cursor-pointer transition-all duration-200 min-w-[180px] h-20 ${
-                                isActive 
-                                ? 'border-[#4F95FF] bg-gradient-to-br from-[#4F95FF]/10 to-transparent shadow-[0_0_15px_rgba(79,149,255,0.15)]' 
-                                : 'border-[#2A2732] hover:border-[#4F95FF]/50 bg-[#1A1820]'
-                            }`}
+                    {/* Profile Selection Pills */}
+                    <div className="px-8 lg:px-12 pb-6 flex flex-wrap gap-4 shrink-0">
+                        {profiles.map(profile => {
+                            const isActive = activeProfileId === profile.id;
+                            return (
+                                <div
+                                    key={profile.id}
+                                    onClick={() => setActiveProfileId(profile.id)}
+                                    className={`group relative flex flex-col justify-center px-5 py-3 rounded-2xl border cursor-pointer transition-all duration-200 min-w-[180px] h-20 ${isActive
+                                            ? 'border-[#3B82F6] bg-gradient-to-br from-[#3B82F6]/10 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+                                            : 'border-[#222] hover:border-[#3B82F6]/50 bg-[#111]'
+                                        }`}
+                                >
+                                    {/* Delete button (shows on hover) */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleRemoveProfile(profile.id, e); }}
+                                        className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                        title="Remove Profile"
+                                    >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    </button>
+
+                                    <div className="flex items-center justify-between mb-1">
+                                        {deployedProfileId === profile.id ? (
+                                            <div className="w-5 h-5 rounded-full bg-[#4F95FF] flex items-center justify-center shrink-0">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                            </div>
+                                        ) : (
+                                            <div className="w-5 h-5 rounded-full border border-[#2A2732] flex items-center justify-center shrink-0 group-hover:border-[#4F95FF]/50 transition-colors">
+                                            </div>
+                                        )}
+                                        {deployedProfileId === profile.id && <span className="text-[9px] font-bold tracking-widest text-[#4F95FF] uppercase bg-[#4F95FF]/20 px-2 py-0.5 rounded-full">ACTIVE</span>}
+                                    </div>
+
+                                    {isActive ? (
+                                        <input
+                                            type="text"
+                                            value={profile.name}
+                                            onChange={(e) => handleUpdateProfileName(profile.id, e.target.value)}
+                                            className="bg-transparent border-none outline-none focus:ring-0 p-0 m-0 text-sm font-bold text-white placeholder-white/50 w-full"
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <h3 className="text-sm font-bold text-white truncate w-full">{profile.name}</h3>
+                                    )}
+
+                                    <p className="text-[10px] text-[#625D71] font-bold tracking-widest truncate w-full">{profile.species}</p>
+                                </div>
+                            );
+                        })}
+
+                        {/* Add New Profile Button */}
+                        <div
+                            onClick={handleAddProfile}
+                            className="flex flex-col items-center justify-center px-5 py-3 rounded-2xl border border-dashed border-[#222] hover:border-slate-300 hover:bg-white/5 cursor-pointer transition-all duration-200 min-w-[180px] h-20 text-[#625D71] hover:text-slate-300"
                         >
-                            {/* Delete button (shows on hover) */}
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); handleRemoveProfile(profile.id, e); }}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                title="Remove Profile"
-                            >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-
-                            <div className="flex items-center justify-between mb-1">
-                                {deployedProfileId === profile.id ? (
-                                    <div className="w-5 h-5 rounded-full bg-[#4F95FF] flex items-center justify-center shrink-0">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    </div>
-                                ) : (
-                                    <div className="w-5 h-5 rounded-full border border-[#2A2732] flex items-center justify-center shrink-0 group-hover:border-[#4F95FF]/50 transition-colors">
-                                    </div>
-                                )}
-                                {isActive && <span className="text-[9px] font-bold tracking-widest text-[#4F95FF] uppercase bg-[#4F95FF]/20 px-2 py-0.5 rounded-full">ACTIVE</span>}
-                            </div>
-                            
-                            {isActive ? (
-                                <input 
-                                    type="text" 
-                                    value={profile.name}
-                                    onChange={(e) => handleUpdateProfileName(profile.id, e.target.value)}
-                                    className="bg-transparent border-none outline-none focus:ring-0 p-0 m-0 text-sm font-bold text-white placeholder-white/50 w-full"
-                                    onClick={(e) => e.stopPropagation()}
-                                />
-                            ) : (
-                                <h3 className="text-sm font-bold text-white truncate w-full">{profile.name}</h3>
-                            )}
-                            
-                            <p className="text-[10px] text-[#625D71] font-bold tracking-widest truncate w-full">{profile.species}</p>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-1"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            <span className="text-[10px] font-bold tracking-widest uppercase">New Profile</span>
                         </div>
-                    );
-                })}
+                    </div>
 
-                {/* Add New Profile Button */}
-                <div 
-                    onClick={handleAddProfile}
-                    className="flex flex-col items-center justify-center px-5 py-3 rounded-2xl border border-dashed border-[#625D71] hover:border-slate-300 hover:bg-white/5 cursor-pointer transition-all duration-200 min-w-[180px] h-20 text-[#625D71] hover:text-slate-300"
-                >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-1"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    <span className="text-[10px] font-bold tracking-widest uppercase">New Profile</span>
-                </div>
-            </div>
+                    <hr className="border-[#222] mx-8 lg:mx-12 mb-8" />
 
-            <hr className="border-[#2A2732] mx-8 lg:mx-12 mb-8" />
+                    {/* Stages Grid */}
+                    <div className="grow px-8 lg:px-12 pb-32 flex gap-8 overflow-x-auto items-start">
+                        {activeProfile ? (
+                            activeProfile.stages.length > 0 ? (
+                                activeProfile.stages.map((stage, idx) => (
+                                    <StageCard
+                                        key={stage.id}
+                                        stage={stage}
+                                        onUpdate={(color, val) => updateStageLight(activeProfile.id, stage.id, color, val)}
+                                        onModify={() => setIsEditingProfile(true)}
+                                    />
+                                ))
+                            ) : (
+                                <div className="text-[#625D71] text-sm italic w-full text-center py-20">No stages defined for this profile.</div>
+                            )
+                        ) : (
+                            <div className="text-[#625D71] text-sm italic w-full text-center py-20">Select a profile to view its recipes.</div>
+                        )}
+                    </div>
 
-            {/* Stages Grid */}
-            <div className="grow px-8 lg:px-12 pb-32 flex gap-8 overflow-x-auto items-start">
-                {activeProfile ? (
-                    activeProfile.stages.length > 0 ? (
-                        activeProfile.stages.map((stage, idx) => (
-                            <StageCard 
-                                key={stage.id} 
-                                stage={stage} 
-                                onUpdate={(color, val) => updateStageLight(activeProfile.id, stage.id, color, val)}
-                                onModify={() => setIsEditingProfile(true)}
-                            />
-                        ))
-                    ) : (
-                        <div className="text-[#625D71] text-sm italic w-full text-center py-20">No stages defined for this profile.</div>
-                    )
-                ) : (
-                    <div className="text-[#625D71] text-sm italic w-full text-center py-20">Select a profile to view its recipes.</div>
-                )}
-            </div>
-
-            {/* Floating Action Buttons */}
-            {activeProfile && (
-                <div className="fixed bottom-10 right-12 flex items-center gap-6 z-30">
-                    <button 
-                        onClick={() => { setProfilesSnapshot(JSON.stringify(profiles)); setIsEditingProfile(true); }} 
-                        className="border border-[#2A2732] hover:bg-white/5 bg-[#15121C] text-white px-6 py-4 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-3 shadow-lg hover:-translate-y-0.5 duration-200"
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                        Modify Configuration Details
-                    </button>
-                    <button 
-                        onClick={handleDeployProfile}
-                        disabled={isDeploying}
-                        className={`bg-[#A485FF] hover:bg-[#8e6bea] text-[#15121B] px-8 py-4 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-3 shadow-[0_0_20px_rgba(164,133,255,0.3)] hover:-translate-y-0.5 duration-200 ${isDeploying ? 'opacity-70 cursor-wait' : ''}`}
-                    >
-                        {isDeploying ? 'Deploying...' : 'Use Profile'}
-                        {!isDeploying && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 10.5L21 3"></path><path d="M16 3h5v5"></path><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>}
-                    </button>
-                </div>
+                    {/* Floating Action Buttons */}
+                    {activeProfile && (
+                        <div className="fixed bottom-10 right-12 flex items-center gap-6 z-30">
+                            <button
+                                onClick={() => { setProfilesSnapshot(JSON.stringify(profiles)); setIsEditingProfile(true); }}
+                                className="border border-[#222] hover:bg-white/5 bg-[#111] text-white px-6 py-4 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-3 shadow-lg hover:-translate-y-0.5 duration-200"
+                            >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                Modify Configuration Details
+                            </button>
+                            <button
+                                onClick={handleDeployProfile}
+                                disabled={isDeploying}
+                                className={`bg-[#A485FF] hover:bg-[#8e6bea] text-[#15121B] px-8 py-4 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors flex items-center gap-3 shadow-[0_0_20px_rgba(164,133,255,0.3)] hover:-translate-y-0.5 duration-200 ${isDeploying ? 'opacity-70 cursor-wait' : ''}`}
+                            >
+                                {isDeploying ? 'Deploying...' : 'Use Profile'}
+                                {!isDeploying && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 10.5L21 3"></path><path d="M16 3h5v5"></path><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>}
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
-            </>
-            )}
-            
+
             {/* Embedded styles for sliders to look correct without extra plugins */}
             <style jsx="true">{`
                 input[type=range] {
@@ -587,13 +588,13 @@ export default function Recipes() {
 }
 
 function StageCard({ stage, onUpdate, onModify }) {
-    
+
     // We treat values simply as numbers
     const total = stage.blue + stage.red + stage.farRed + stage.white || 1;
 
     return (
-        <div className="w-[360px] lg:w-[400px] shrink-0 border border-[#2A2732] rounded-[2rem] bg-[#15121C] overflow-hidden flex flex-col relative relative">
-            
+        <div className="w-[360px] lg:w-[400px] shrink-0 border border-[#222] rounded-[2rem] bg-[#111] overflow-hidden flex flex-col relative relative">
+
             {/* Background Image Header */}
             <div className="absolute top-0 left-0 w-full h-[280px] pointer-events-none" style={{ maskImage: 'linear-gradient(to bottom, black 20%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 20%, transparent 100%)' }}>
                 <img src={stage.image || agriImage} alt="" className="w-full h-full object-cover grayscale mix-blend-luminosity opacity-40 object-center" />
@@ -620,34 +621,38 @@ function StageCard({ stage, onUpdate, onModify }) {
                 <p className="text-[9px] text-[#625D71] font-bold tracking-[0.2em] mb-8">SPECTRUM RATIO (B:R:FR:W)</p>
 
                 {/* Sliders Container */}
-                <div className="space-y-6 mb-8 border-b border-[#2A2732] pb-8">
-                    <SliderRow 
-                        label="BLUE" 
-                        value={stage.blue} 
-                        color="#4F95FF" 
-                        thumbClass="thumb-blue" 
-                        onChange={(e) => onUpdate('blue', e.target.value)} 
+                <div className="space-y-6 mb-8 border-b border-[#222] pb-8">
+                    <SliderRow
+                        label="BLUE"
+                        value={stage.blue}
+                        color="#4F95FF"
+                        thumbClass="thumb-blue"
+                        onChange={(e) => onUpdate('blue', e.target.value)}
+                        disabled={true}
                     />
-                    <SliderRow 
-                        label="RED" 
-                        value={stage.red} 
-                        color="#FF4A4A" 
-                        thumbClass="thumb-red" 
-                        onChange={(e) => onUpdate('red', e.target.value)} 
+                    <SliderRow
+                        label="RED"
+                        value={stage.red}
+                        color="#FF4A4A"
+                        thumbClass="thumb-red"
+                        onChange={(e) => onUpdate('red', e.target.value)}
+                        disabled={true}
                     />
-                    <SliderRow 
-                        label="FAR-RED" 
-                        value={stage.farRed} 
-                        color="#FF2A85" 
-                        thumbClass="thumb-pink" 
-                        onChange={(e) => onUpdate('farRed', e.target.value)} 
+                    <SliderRow
+                        label="FAR-RED"
+                        value={stage.farRed}
+                        color="#FF2A85"
+                        thumbClass="thumb-pink"
+                        onChange={(e) => onUpdate('farRed', e.target.value)}
+                        disabled={true}
                     />
-                    <SliderRow 
-                        label="WHITE" 
-                        value={stage.white} 
-                        color="#FFFFFF" 
-                        thumbClass="thumb-white" 
-                        onChange={(e) => onUpdate('white', e.target.value)} 
+                    <SliderRow
+                        label="WHITE"
+                        value={stage.white}
+                        color="#FFFFFF"
+                        thumbClass="thumb-white"
+                        onChange={(e) => onUpdate('white', e.target.value)}
+                        disabled={true}
                     />
                 </div>
 
@@ -657,7 +662,7 @@ function StageCard({ stage, onUpdate, onModify }) {
                         <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] uppercase">LIGHT INTENSITY (PPFD)</span>
                         <div className="flex items-baseline gap-1">
                             <span className="text-3xl font-bold font-mono text-white tracking-tighter">{stage.lightIntensity}</span>
-                            <span className="text-[8px] text-[#625D71] font-bold tracking-widest uppercase">µmol/<br/>m²/s</span>
+                            <span className="text-[8px] text-[#625D71] font-bold tracking-widest uppercase">&micro;mol/<br />m²/s</span>
                         </div>
                     </div>
                 </div>
@@ -667,7 +672,7 @@ function StageCard({ stage, onUpdate, onModify }) {
     );
 }
 
-function SliderRow({ label, value, color, onChange, thumbClass }) {
+function SliderRow({ label, value, color, onChange, thumbClass, disabled = false }) {
     return (
         <div>
             <div className="flex justify-between items-center mb-3">
@@ -676,11 +681,12 @@ function SliderRow({ label, value, color, onChange, thumbClass }) {
                 </span>
                 <span className="text-sm font-bold font-mono text-white text-right w-10">{value}%</span>
             </div>
-            <input 
-                type="range" min="0" max="100" 
-                value={value} 
+            <input
+                type="range" min="0" max="100"
+                value={value}
                 onChange={onChange}
-                className={`w-full ${thumbClass} bg-transparent h-1`}
+                disabled={disabled}
+                className={`w-full ${thumbClass} bg-transparent h-1 ${disabled ? 'pointer-events-none' : ''}`}
                 style={{
                     background: `linear-gradient(to right, ${color} ${value}%, #2A2732 ${value}%)`,
                 }}
@@ -699,11 +705,11 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
         <>
             {/* Editable Profile Name */}
             <div className="px-8 lg:px-12 pb-4 flex items-center shrink-0">
-                <input 
+                <input
                     type="text"
                     value={profile.name}
                     onChange={(e) => onUpdateProfileName(e.target.value)}
-                    className="text-3xl font-bold bg-transparent text-white border-b-2 border-transparent hover:border-[#2A2732] focus:border-[#97CBFF] outline-none px-2 py-1 -ml-2 transition-colors w-full max-w-md"
+                    className="text-3xl font-bold bg-transparent text-white border-b-2 border-transparent hover:border-[#222] focus:border-[#97CBFF] outline-none px-2 py-1 -ml-2 transition-colors w-full max-w-md"
                     placeholder="Enter Profile Name..."
                 />
             </div>
@@ -712,20 +718,20 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
                 {profile.stages.length > 0 ? (
                     profile.stages.map((stage, idx) => (
                         expandedStageId === stage.id ? (
-                            <ExpandedStageEditor 
-                                key={stage.id} 
-                                stage={stage} 
-                                index={idx} 
-                                onUpdateName={(name) => onUpdateStageName(stage.id, name)} 
+                            <ExpandedStageEditor
+                                key={stage.id}
+                                stage={stage}
+                                index={idx}
+                                onUpdateName={(name) => onUpdateStageName(stage.id, name)}
                                 onRemove={() => onRemoveStage(stage.id)}
                                 onUpdateLogic={(key, value) => onUpdateLogic(stage.id, key, value)}
                             />
                         ) : (
-                            <CollapsedStageCard 
-                                key={stage.id} 
-                                stage={stage} 
-                                index={idx} 
-                                onExpand={() => setExpandedStageId(stage.id)} 
+                            <CollapsedStageCard
+                                key={stage.id}
+                                stage={stage}
+                                index={idx}
+                                onExpand={() => setExpandedStageId(stage.id)}
                                 onRemove={() => onRemoveStage(stage.id)}
                             />
                         )
@@ -734,11 +740,11 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
                     <div className="text-center py-20 text-[#625D71] text-xs italic tracking-wide">No stages configured yet.</div>
                 )}
 
-                <button 
+                <button
                     onClick={onAddStage}
-                    className="w-full py-12 border-2 border-dashed border-[#2A2732] hover:border-[#97CBFF]/50 hover:bg-[#97CBFF]/5 rounded-[2rem] transition-colors flex flex-col items-center justify-center gap-4 mt-6"
+                    className="w-full py-12 border-2 border-dashed border-[#222] hover:border-[#97CBFF]/50 hover:bg-[#97CBFF]/5 rounded-[2rem] transition-colors flex flex-col items-center justify-center gap-4 mt-6"
                 >
-                    <div className="w-12 h-12 rounded-full bg-[#2A2732] flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-[#111] flex items-center justify-center">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#97CBFF" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </div>
                     <span className="text-[#97CBFF] font-bold tracking-[0.2em] text-xs uppercase">Add New Growth Stage</span>
@@ -746,7 +752,7 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
             </div>
 
             {/* Bottom Bar for Editor */}
-            <div className="mt-8 mb-4 px-8 py-5 border border-[#2A2732] rounded-[2rem] flex justify-between items-center bg-[#15121C]">
+            <div className="mt-8 mb-4 px-8 py-5 border border-[#222] rounded-[2rem] flex justify-between items-center bg-[#111]">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#97CBFF] shadow-[0_0_8px_#97CBFF]"></div>
@@ -757,9 +763,9 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
                         <span className="text-[10px] tracking-wide inline-block mt-0.5">Autosaved 2m ago</span>
                     </div>
                 </div>
-                
+
                 <div className="flex items-center gap-6">
-                    <button onClick={onDiscard} className="text-[10px] font-bold tracking-widest uppercase text-[#625D71] hover:text-white transition-colors border border-[#2A2732] hover:border-white/20 rounded-full px-6 py-3.5">
+                    <button onClick={onDiscard} className="text-[10px] font-bold tracking-widest uppercase text-[#625D71] hover:text-white transition-colors border border-[#222] hover:border-white/20 rounded-full px-6 py-3.5">
                         Discard Changes
                     </button>
                     <button onClick={onSave} className="bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] px-10 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors shadow-[0_0_20px_rgba(151,203,255,0.3)]">
@@ -773,7 +779,7 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
 
 function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLogic }) {
     // Handle mock values default initializations
-    const useLeafCount = stage.useLeafCount !== false; 
+    const useLeafCount = stage.useLeafCount !== false;
     const leafCount = stage.leafCount || 8;
     const useDiameter = stage.useDiameter !== false;
     const diameter = stage.diameter || 12;
@@ -811,9 +817,9 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         {index + 1}
                     </div>
                     <div className="w-full max-w-sm">
-                        <input 
-                            type="text" 
-                            value={stage.name.split('\n')[0]} 
+                        <input
+                            type="text"
+                            value={stage.name.split('\n')[0]}
                             onChange={(e) => onUpdateName(e.target.value)}
                             className="text-2xl font-bold text-white mb-1 bg-transparent border border-transparent hover:border-[#2A2732] focus:border-[#4F95FF] focus:bg-[#15121C] px-2 py-1 -ml-2 rounded-lg outline-none transition-colors w-full"
                             placeholder="Phase Name"
@@ -821,7 +827,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         <p className="text-[#625D71] text-xs font-medium pl-1">Target: Strong root development & initial shoot emergence</p>
                     </div>
                 </div>
-                
+
                 <button onClick={onRemove} className="shrink-0 flex items-center justify-center w-12 h-12 rounded-full border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-colors" title="Delete Stage">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
@@ -845,28 +851,28 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                                 <div key={seg.id} className={`grid grid-cols-[1fr_1fr_1fr_24px] gap-2 py-3 px-6 items-center group rounded-xl transition ${i % 2 !== 0 ? 'bg-white/[0.02]' : ''}`}>
                                     {/* Time */}
                                     <div className="flex justify-center">
-                                        <input 
-                                            type="time" 
+                                        <input
+                                            type="time"
                                             value={seg.time}
                                             onChange={(e) => handleUpdateSegment(seg.id, 'time', e.target.value)}
                                             className="bg-transparent text-[#97CBFF] font-mono font-bold text-[15px] tracking-wider text-center outline-none w-24 hover:bg-[#2A2732]/50 rounded cursor-text"
                                         />
                                     </div>
-                                    
+
                                     {/* Status */}
                                     <div className="flex justify-center">
-                                        <button 
+                                        <button
                                             onClick={() => handleUpdateSegment(seg.id, 'status', seg.status === 'ACTIVE' ? 'OFF' : 'ACTIVE')}
                                             className={`text-[9px] px-3 py-1 rounded-full font-bold tracking-wider transition-colors ${seg.status === 'ACTIVE' ? 'bg-[#4F95FF]/20 border border-[#4F95FF]/30 text-[#97CBFF]' : 'bg-[#2A2732] text-[#625D71] border border-transparent hover:border-[#625D71]'}`}
                                         >
                                             {seg.status}
                                         </button>
                                     </div>
-                                    
+
                                     {/* Intensity */}
                                     <div className="flex justify-center items-center">
                                         <div className="flex items-center gap-1 border border-transparent hover:border-[#2A2732] hover:bg-[#15121C] rounded px-2 w-16 justify-center transition-colors">
-                                            <input 
+                                            <input
                                                 type="number"
                                                 min="0"
                                                 max="100"
@@ -880,7 +886,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
 
                                     {/* Delete Button */}
                                     <div className="flex justify-end">
-                                        <button 
+                                        <button
                                             onClick={() => handleRemoveSegment(seg.id)}
                                             className="text-[#625D71] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all font-bold"
                                             title="Delete Segment"
@@ -895,7 +901,8 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         {/* Dashed Add Segment Button */}
                         <div className="px-6 mt-4 relative">
                             {/* Define styling to hide the number input arrows and style time picker */}
-                            <style dangerouslySetInnerHTML={{__html: `
+                            <style dangerouslySetInnerHTML={{
+                                __html: `
                                 input[type=number].hide-arrows::-webkit-inner-spin-button, 
                                 input[type=number].hide-arrows::-webkit-outer-spin-button { 
                                     -webkit-appearance: none; 
@@ -924,43 +931,43 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                 {/* Spectra */}
                 <div className="col-span-12 xl:col-span-5">
                     <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71] mb-8">Spectrum Ratio (B:R:FR:W)</h4>
-                    
+
                     <div className="space-y-6">
-                        <SliderRow 
-                            label="Deep Blue (450nm)" 
-                            value={stage.blue} 
-                            color="#4F95FF" 
-                            thumbClass="thumb-blue" 
-                            onChange={(e) => onUpdateLogic('blue', e.target.value)} 
+                        <SliderRow
+                            label="Deep Blue (450nm)"
+                            value={stage.blue}
+                            color="#4F95FF"
+                            thumbClass="thumb-blue"
+                            onChange={(e) => onUpdateLogic('blue', e.target.value)}
                         />
-                        <SliderRow 
-                            label="Deep Red (660nm)" 
-                            value={stage.red} 
-                            color="#FF4A4A" 
-                            thumbClass="thumb-red" 
-                            onChange={(e) => onUpdateLogic('red', e.target.value)} 
+                        <SliderRow
+                            label="Deep Red (660nm)"
+                            value={stage.red}
+                            color="#FF4A4A"
+                            thumbClass="thumb-red"
+                            onChange={(e) => onUpdateLogic('red', e.target.value)}
                         />
-                        <SliderRow 
-                            label="Far Red (730nm)" 
-                            value={stage.farRed} 
-                            color="#FF2A85" 
-                            thumbClass="thumb-pink" 
-                            onChange={(e) => onUpdateLogic('farRed', e.target.value)} 
+                        <SliderRow
+                            label="Far Red (730nm)"
+                            value={stage.farRed}
+                            color="#FF2A85"
+                            thumbClass="thumb-pink"
+                            onChange={(e) => onUpdateLogic('farRed', e.target.value)}
                         />
-                        <SliderRow 
-                            label="Full Spectrum White" 
-                            value={stage.white} 
-                            color="#FFFFFF" 
-                            thumbClass="thumb-white" 
-                            onChange={(e) => onUpdateLogic('white', e.target.value)} 
+                        <SliderRow
+                            label="Full Spectrum White"
+                            value={stage.white}
+                            color="#FFFFFF"
+                            thumbClass="thumb-white"
+                            onChange={(e) => onUpdateLogic('white', e.target.value)}
                         />
                     </div>
 
                     <div className="flex justify-between items-center mt-12 pr-4 lg:pr-10">
-                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] leading-snug">LIGHT INTENSITY<br/>(PPFD)</span>
+                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] leading-snug">LIGHT INTENSITY<br />(PPFD)</span>
                         <div className="flex items-center gap-4">
                             <div className="bg-[#15121C] border border-[#2A2732] rounded-full px-6 py-2 w-28 flex justify-end items-center">
-                                <input 
+                                <input
                                     type="number"
                                     min="0"
                                     className="bg-transparent text-[#97CBFF] font-mono font-bold text-lg w-full text-right outline-none placeholder-[#625D71] hide-arrows"
@@ -968,7 +975,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                                     onChange={(e) => onUpdateLogic('lightIntensity', parseInt(e.target.value) || 0)}
                                 />
                             </div>
-                            <span className="text-[#625D71] text-[8px] font-bold tracking-[0.1em] leading-none uppercase">µmol/<br/>m²/s<br/><span className="text-[#4F95FF] tracking-[0.2em] mt-1 inline-block">TARGET</span></span>
+                            <span className="text-[#625D71] text-[8px] font-bold tracking-[0.1em] leading-none uppercase">µmol/<br />m²/s<br /><span className="text-[#4F95FF] tracking-[0.2em] mt-1 inline-block">TARGET</span></span>
                         </div>
                     </div>
                 </div>
@@ -979,14 +986,14 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                 <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71] mb-6">Advance to next stage when:</h4>
                 <div className="flex flex-wrap items-center gap-6">
                     <div className="flex items-center gap-4">
-                        <div 
+                        <div
                             onClick={() => onUpdateLogic('useLeafCount', !useLeafCount)}
                             className={`w-5 h-5 rounded overflow-hidden flex items-center justify-center cursor-pointer border transition-colors ${useLeafCount ? 'bg-[#97CBFF] border-[#97CBFF]' : 'bg-transparent border-[#625D71]'}`}
                         >
                             {useLeafCount && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15121B" strokeWidth="4"><polyline points="20 6 9 17 4 12"></polyline></svg>}
                         </div>
                         <span className="text-white font-bold text-xs tracking-wide">Leaf Count</span>
-                        <input 
+                        <input
                             type="number"
                             value={leafCount}
                             onChange={(e) => onUpdateLogic('leafCount', e.target.value)}
@@ -996,14 +1003,14 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <div 
+                        <div
                             onClick={() => onUpdateLogic('useDiameter', !useDiameter)}
                             className={`w-5 h-5 rounded overflow-hidden flex items-center justify-center cursor-pointer border transition-colors ${useDiameter ? 'bg-[#97CBFF] border-[#97CBFF]' : 'bg-transparent border-[#625D71]'}`}
                         >
                             {useDiameter && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15121B" strokeWidth="4"><polyline points="20 6 9 17 4 12"></polyline></svg>}
                         </div>
                         <span className="text-white font-bold text-xs tracking-wide">Diameter</span>
-                        <input 
+                        <input
                             type="number"
                             value={diameter}
                             onChange={(e) => onUpdateLogic('diameter', e.target.value)}
@@ -1029,13 +1036,13 @@ function CollapsedStageCard({ stage, index, onExpand, onRemove }) {
                 <div className="w-full">
                     <h3 className="text-2xl font-bold text-[#625D71] mb-2">{stage.name.split('\n')[0] || 'Vegetative Stage'}</h3>
                     <p className="text-[#625D71]/60 text-xs font-medium mb-10">Expansion of true leaves and biomass accumulation</p>
-                    
+
                     <div className="border border-dashed border-[#2A2732] rounded-2xl py-6 flex items-center justify-center w-full lg:max-w-md bg-white/[0.01]">
                         <span className="text-[#625D71] text-[10px] tracking-widest font-bold uppercase">Configuration Active</span>
                     </div>
                 </div>
             </div>
-            
+
             <div className="relative z-10 xl:h-full flex items-center shrink-0 pr-4 gap-4">
                 <button onClick={onExpand} className="flex items-center gap-3 text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase hover:text-white transition py-4 px-6 rounded-full hover:bg-white/5">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>

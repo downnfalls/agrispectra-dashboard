@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import agriImage from './login/resources/Agriculture.png';
 import UserProfile from '../components/UserProfile';
+import { API_BASE_URL } from '../../config';
 
 function Dashboard() {
     // --------------------------------------------------------
@@ -8,20 +9,112 @@ function Dashboard() {
     // --------------------------------------------------------
     const [dashboardData, setDashboardData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [deployedProfile, setDeployedProfile] = useState(null);
 
     useEffect(() => {
-        // จำลองการเรียก API ข้อมูล Dashboard แดชบอร์ด
+        let isComponentMounted = true;
+
+        // 1. โหลดข้อมูล Profile ที่ Deployed ไว้ก่อน
+        const savedDeployedProfileIdStr = localStorage.getItem('agrispectra_deployed_profile');
+        const savedProfilesStr = localStorage.getItem('agrispectra_profiles');
+        let currentProfile = null;
+        if (savedDeployedProfileIdStr && savedProfilesStr) {
+            const deployedProfileId = JSON.parse(savedDeployedProfileIdStr);
+            const profiles = JSON.parse(savedProfilesStr);
+            currentProfile = profiles.find(p => p.id === deployedProfileId);
+            setDeployedProfile(currentProfile);
+        }
+
+        // ฟังก์ชันส่วนกลางสำหรับแปลงข้อมูล ESP32 เป็น UI State
+        const processPayload = (esp32Payload, activeProfile) => {
+            const leafCount = esp32Payload.leaf_count;
+            const leafDensity = esp32Payload.leaf_density;
+            let currentPhaseName = "";
+            let currentStepIndex = 0;
+            let totalSteps = activeProfile?.stages?.length || 4;
+
+            if (activeProfile && activeProfile.stages && activeProfile.stages.length > 0) {
+                const foundIndex = activeProfile.stages.findIndex(s => s.name.split('\n')[0] === esp32Payload.stage);
+                if (foundIndex !== -1) {
+                    currentPhaseName = esp32Payload.stage;
+                    currentStepIndex = foundIndex + 1;
+                } else {
+                    currentPhaseName = null;
+                    currentStepIndex = 0;
+                }
+            }
+
+            let updatedPpfd = "--";
+            let spectrumData = [
+                { name: "Blue (450nm)", status: "WAITING...", percentage: 0, barColor: "bg-[#97CBFF]", statusColor: "text-[#625D71]" },
+                { name: "Red (660nm)", status: "WAITING...", percentage: 0, barColor: "bg-red-500", statusColor: "text-[#625D71]" },
+                { name: "Far-Red (730nm)", status: "WAITING...", percentage: 0, barColor: "bg-pink-700", statusColor: "text-[#625D71]" },
+                { name: "White", status: "WAITING...", percentage: 0, barColor: "bg-gray-500", statusColor: "text-[#625D71]" }
+            ];
+
+            if (esp32Payload.total !== undefined) {
+                updatedPpfd = esp32Payload.total.toString();
+                const tot = esp32Payload.total;
+                const calcPct = (v, t) => (!t || !v) ? 0 : Math.min(100, Math.round((v / t) * 100));
+                
+                const formatColor = (name, obj, colorClass) => {
+                    const val = obj?.value || 0;
+                    const diff = obj?.diff || 0;
+                    let status = "Target Match";
+                    let sColor = "text-[#625D71]";
+                    if (diff > 0) { status = `+${diff} Above Target`; sColor = "text-[#34D399]"; }
+                    else if (diff < 0) { status = `${diff} Below Target`; sColor = "text-[#EF4444]"; }
+                    
+                    return {
+                        name, status, percentage: calcPct(val, tot),
+                        barColor: colorClass, statusColor: sColor
+                    };
+                };
+
+                spectrumData = [
+                    formatColor("Blue (450nm)", esp32Payload.blue, "bg-[#97CBFF]"),
+                    formatColor("Red (660nm)", esp32Payload.red, "bg-red-500"),
+                    formatColor("Far-Red (730nm)", esp32Payload.farRed, "bg-pink-700"),
+                    formatColor("White", esp32Payload.white, "bg-gray-500")
+                ];
+            }
+
+            return {
+                currentPhaseName, currentStepIndex, totalSteps,
+                leafCount, leafDensity, spectrumData, currentPpfd: updatedPpfd
+            };
+        };
+
         const fetchDashboardData = async () => {
             setIsLoading(true);
             try {
-                // จำลอง Response จาก Backend
+                // 2. ขอข้อมูลจาก Backend
+                const token = sessionStorage.getItem('token');
+                let esp32Payload = null;
+                try {
+                    const hwResponse = await fetch(`${API_BASE_URL}/api/hardware/state`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (hwResponse.ok) {
+                        esp32Payload = await hwResponse.json();
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch hardware state.");
+                }
+
+                const processed = esp32Payload ? processPayload(esp32Payload, currentProfile) : {
+                    currentPhaseName: null, currentStepIndex: 0, totalSteps: currentProfile?.stages?.length || 4,
+                    leafCount: null, leafDensity: null, currentPpfd: "--",
+                    spectrumData: [
+                        { name: "Blue (450nm)", status: "WAITING...", percentage: 0, barColor: "bg-[#97CBFF]", statusColor: "text-[#625D71]" },
+                        { name: "Red (660nm)", status: "WAITING...", percentage: 0, barColor: "bg-red-500", statusColor: "text-[#625D71]" },
+                        { name: "Far-Red (730nm)", status: "WAITING...", percentage: 0, barColor: "bg-pink-700", statusColor: "text-[#625D71]" },
+                        { name: "White", status: "WAITING...", percentage: 0, barColor: "bg-gray-500", statusColor: "text-[#625D71]" }
+                    ]
+                };
+
                 const mockApiResponse = {
-                    metadata: {
-                        batchId: "L-8821",
-                        cycleProgress: 84,
-                        cameraStatus: "ONLINE",
-                        lastCapture: "Aug 25, 2026 - 14:15:39"
-                    },
+                    metadata: { batchId: "L-8821", cycleProgress: 84, cameraStatus: "ONLINE", lastCapture: "Aug 25, 2026 - 14:15:39" },
                     visionInfo: {
                         canopyCoverage: 72,
                         plants: [
@@ -38,18 +131,15 @@ function Dashboard() {
                         { time: "14:20:12", type: "ALERT", message: "Humidity drop detected in Zone 4 (-4.5% RH). Adjusting ventilation.", processTime: "0.05ms" }
                     ],
                     growthState: {
-                        currentPhase: "Leaf Development",
-                        currentStepIndex: 2, // ขั้นที่ 1 และ 2 เสร็จแล้ว
-                        totalSteps: 4
+                        currentPhase: processed.currentPhaseName,
+                        currentStepIndex: processed.currentStepIndex,
+                        totalSteps: processed.totalSteps,
+                        leafCount: processed.leafCount,
+                        leafDensity: processed.leafDensity
                     },
-                    spectrum: [
-                        { name: "Blue (450nm)", status: "+3% Above Target", percentage: 70, barColor: "bg-[#97CBFF]", statusColor: "text-[#34D399]" },
-                        { name: "Red (660nm)", status: "Target Match", percentage: 85, barColor: "bg-red-500", statusColor: "text-[#625D71]" },
-                        { name: "Far-Red (730nm)", status: "-2% Below Target", percentage: 20, barColor: "bg-pink-700", statusColor: "text-red-400" },
-                        { name: "White (Target 10%)", status: "Target Match", percentage: 10, barColor: "bg-gray-500", statusColor: "text-[#625D71]" }
-                    ],
+                    spectrum: processed.spectrumData,
                     stats: {
-                        ppfd: { range: "250 - 280", unit: "µmol/m²/s", diff: "+0.8%", diffSource: "VS AVG", stable: true },
+                        ppfd: { range: processed.currentPpfd, unit: "µmol/m²/s", diff: processed.currentPpfd === "--" ? "--" : "LIVE", diffSource: "ESP32", stable: processed.currentPpfd !== "--" },
                         latency: { value: 12, unit: "ms", status: "Stable" },
                         harvest: { estimateDays: 18, dateStr: "May 25" },
                         power: { watts: 380, usagePercentage: 60 }
@@ -57,16 +147,85 @@ function Dashboard() {
                 };
 
                 setTimeout(() => {
-                    setDashboardData(mockApiResponse);
-                    setIsLoading(false);
-                }, 750); // delay จำลองเน็ต
+                    if (isComponentMounted) {
+                        setDashboardData(mockApiResponse);
+                        setIsLoading(false);
+                    }
+                }, 750);
             } catch (err) {
-                console.error("Failed to fetch dashboard overview", err);
-                setIsLoading(false);
+                console.error("Fetch Error:", err);
+                if (isComponentMounted) setIsLoading(false);
             }
         };
 
         fetchDashboardData();
+
+        // --- WebSocket Real-time Integration ---
+        let socket = null;
+        const connectWS = () => {
+            const wsUrl = API_BASE_URL.replace('http', 'ws') + '/hardware/ws';
+            console.log("Connecting to WebSocket:", wsUrl);
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => console.log("✅ WebSocket Connected");
+            
+            socket.onmessage = (event) => {
+                try {
+                    const newPayload = JSON.parse(event.data);
+                    console.log("📥 WS Message Received:", newPayload);
+                    const processed = processPayload(newPayload, currentProfile);
+                    
+                    setDashboardData(prev => {
+                        if (!prev) return prev;
+                        return {
+                            ...prev,
+                            growthState: {
+                                ...prev.growthState,
+                                currentPhase: processed.currentPhaseName || null,
+                                currentStepIndex: processed.currentStepIndex,
+                                totalSteps: processed.totalSteps,
+                                leafCount: processed.leafCount,
+                                leafDensity: processed.leafDensity
+                            },
+                            spectrum: processed.spectrumData,
+                            stats: {
+                                ...prev.stats,
+                                ppfd: {
+                                    ...prev.stats.ppfd,
+                                    range: processed.currentPpfd,
+                                    diff: processed.currentPpfd === "--" ? "--" : "LIVE",
+                                    stable: processed.currentPpfd !== "--"
+                                }
+                            }
+                        };
+                    });
+                } catch (e) {
+                    console.error("Error parsing WS message:", e);
+                }
+            };
+
+            socket.onclose = (e) => {
+                console.log("❌ WebSocket Closed. Reconnecting in 3s...", e.reason);
+                if (isComponentMounted) {
+                    setTimeout(connectWS, 3000);
+                }
+            };
+
+            socket.onerror = (err) => {
+                console.error("⚠️ WebSocket Error:", err);
+                socket.close();
+            };
+        };
+
+        connectWS();
+
+        return () => {
+            isComponentMounted = false;
+            if (socket) {
+                console.log("Cleaning up WebSocket...");
+                socket.close();
+            }
+        };
     }, []);
 
     // Helper สำหรับสร้างสไตล์สีของก้อน Log
@@ -80,7 +239,7 @@ function Dashboard() {
 
     if (isLoading || !dashboardData) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center min-h-screen">
+            <div className="flex-1 flex flex-col items-center justify-center min-h-screen bg-[#0A0A0A]">
                 <div className="w-10 h-10 border-4 border-[#CBA6F7]/30 border-t-[#CBA6F7] rounded-full animate-spin mb-4"></div>
                 <div className="text-[#625D71] font-mono tracking-widest text-[10px] uppercase">Fetching Dashboard Data...</div>
             </div>
@@ -99,7 +258,7 @@ function Dashboard() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <div className="bg-[#15121C] rounded-full px-4 py-2 flex items-center gap-3 border border-[#2A2732]">
+                    <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
                         <div className={`w-2 h-2 rounded-full ${metadata.cameraStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
                         <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM {metadata.cameraStatus}</span>
                     </div>
@@ -114,12 +273,12 @@ function Dashboard() {
                 <div className="col-span-12 xl:col-span-8 flex flex-col gap-6">
                     
                     {/* Big Image Container (Camera View) */}
-                    <div className="bg-[#2A2732] rounded-3xl overflow-hidden relative border border-[#3E3A4B] h-[480px] p-1 flex flex-col">
+                    <div className="bg-[#151515] rounded-3xl overflow-hidden relative border border-[#222] h-[480px] p-1 flex flex-col">
                         <div className="relative flex-1 rounded-[1.4rem] overflow-hidden bg-[#1D1A24]">
                             <img src={agriImage} alt="Canopy" className="w-full h-full object-cover absolute inset-0 opacity-80" />
                             
                             {/* Coverage Widget */}
-                            <div className="absolute top-4 right-4 bg-[#15121C]/80 backdrop-blur-md border border-[#3E3A4B] p-4 rounded-xl">
+                            <div className="absolute top-4 right-4 bg-[#0A0A0A]/80 backdrop-blur-md border border-[#222] p-4 rounded-xl">
                                 <p className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-1">Canopy Coverage</p>
                                 <p className="text-[#97CBFF] text-4xl font-bold text-right">{visionInfo.canopyCoverage}%</p>
                             </div>
@@ -149,7 +308,7 @@ function Dashboard() {
                         </div>
 
                         {/* Capture Controls Bar */}
-                        <div className="flex justify-between items-center p-4 bg-[#15121C]">
+                        <div className="flex justify-between items-center p-4 bg-[#111]">
                             <div className="flex-1"></div>
                             <div className="flex flex-col items-end gap-3">
                                 <span className="text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase">Last Capture: {metadata.lastCapture}</span>
@@ -161,7 +320,7 @@ function Dashboard() {
                     </div>
 
                     {/* System Intelligence Logs */}
-                    <div className="bg-[#15121C] border border-[#2A2732] rounded-3xl p-6">
+                    <div className="bg-[#111] border border-[#222] rounded-3xl p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-white font-bold text-[11px] tracking-widest uppercase flex items-center gap-2">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CBA6F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -191,20 +350,42 @@ function Dashboard() {
                 <div className="col-span-12 xl:col-span-4 flex flex-col gap-6">
                     
                     {/* Growth State */}
-                    <div className="bg-[#2A2732] border border-[#3E3A4B] rounded-3xl p-6">
+                    <div className="bg-[#151515] border border-[#222] rounded-3xl p-6">
                         <h3 className="text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase mb-6">Growth State</h3>
-                        <p className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase text-center mb-2">Current Protocol Phase</p>
-                        <h2 className="text-white text-3xl font-bold text-center tracking-widest uppercase mb-6">{growthState.currentPhase}</h2>
+                        <p className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase text-center mb-2">
+                            {growthState.currentPhase && growthState.currentStepIndex > 0
+                                ? `PHASE ${growthState.currentStepIndex} OF ${growthState.totalSteps}`
+                                : "Current Protocol Phase"}
+                        </p>
+                        <h2 className="text-white text-3xl font-bold text-center tracking-widest uppercase mb-6">
+                            {growthState.currentPhase ? growthState.currentPhase : "---"}
+                        </h2>
                         
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 mb-6">
                             {Array.from({ length: growthState.totalSteps }).map((_, i) => (
                                 <div key={i} className={`h-1 flex-1 ${i < growthState.currentStepIndex ? 'bg-[#34D399]' : 'bg-[#3E3A4B]'}`}></div>
                             ))}
                         </div>
+
+                        <div className="flex justify-between border-t border-[#3E3A4B] pt-4">
+                            <div className="flex flex-col items-center">
+                                <span className="text-[#625D71] text-[9px] font-bold tracking-widest uppercase mb-1">Leaf Count</span>
+                                <span className={`text-xl font-mono font-bold ${growthState.leafCount != null ? 'text-[#97CBFF]' : 'text-[#625D71]'}`}>
+                                    {growthState.leafCount != null ? growthState.leafCount : "--"}
+                                </span>
+                            </div>
+                            <div className="w-[1px] bg-[#3E3A4B]"></div>
+                            <div className="flex flex-col items-center">
+                                <span className="text-[#625D71] text-[9px] font-bold tracking-widest uppercase mb-1">Leaf Density</span>
+                                <span className={`text-xl font-mono font-bold ${growthState.leafDensity != null ? 'text-[#4F95FF]' : 'text-[#625D71]'}`}>
+                                    {growthState.leafDensity != null ? growthState.leafDensity + '%' : "--%"}
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Spectrum */}
-                    <div className="bg-[#2A2732] border border-[#3E3A4B] rounded-3xl p-6">
+                    <div className="bg-[#151515] border border-[#222] rounded-3xl p-6">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="text-[#CBA6F7] font-bold text-[10px] tracking-widest uppercase">Spectrum (TSL2591)</h3>
                             <span className="text-[#34D399] font-bold text-[10px] tracking-widest uppercase">Stable-Optimized</span>
@@ -226,7 +407,7 @@ function Dashboard() {
                     </div>
 
                     {/* Quick Stats Grid */}
-                    <div className="bg-[#2A2732] border border-[#3E3A4B] rounded-3xl p-6 flex flex-col gap-6">
+                    <div className="bg-[#151515] border border-[#222] rounded-3xl p-6 flex flex-col gap-6">
                         
                         {/* PPFD */}
                         <div className="flex items-center gap-4">
@@ -248,7 +429,7 @@ function Dashboard() {
                     </div>
 
                     {/* Power Consumption (Red box) */}
-                    <div className="bg-[#2A2732] border border-[#3E3A4B] rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between min-h-[140px] flex-1">
+                    <div className="bg-[#151515] border border-[#222] rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between min-h-[140px] flex-1">
                         <div className="absolute left-0 top-6 bottom-6 w-1 bg-red-500 rounded-r"></div>
                         <div className="flex justify-between items-start">
                             <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase pl-3">Power Consumption</h3>

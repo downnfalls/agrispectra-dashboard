@@ -4,9 +4,9 @@ const DashboardLayout = () => {
     const location = useLocation();
 
     return (
-        <div className="bg-[#100E14] min-h-screen text-slate-200 flex font-sans">
+        <div className="bg-[#0A0A0A] min-h-screen text-slate-200 flex font-sans">
             {/* Sidebar */}
-            <aside className="w-64 border-r border-[#2A2732] flex flex-col justify-between py-8 px-4 flex-shrink-0">
+            <aside className="w-64 border-r border-[#222] flex flex-col justify-between py-8 px-4 flex-shrink-0">
                 <div>
                     {/* Header */}
                     <div className="mb-12 px-4">
@@ -33,14 +33,37 @@ const DashboardLayout = () => {
                 </div>
 
                 <div className="px-4">
-                    <button className="w-full border border-red-900/50 hover:bg-red-900/20 text-red-500 font-bold text-[10px] tracking-widest uppercase py-4 rounded-xl transition-colors">
+                    <button 
+                        onClick={async () => {
+                            if (window.confirm("🚨 ARE YOU SURE? This will immediately SHUT DOWN all hardware systems!")) {
+                                try {
+                                    const token = sessionStorage.getItem('token');
+                                    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/hardware/stop`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`
+                                        }
+                                    });
+                                    if (response.ok) {
+                                        alert("🛑 Emergency Stop command sequence initiated.");
+                                    } else {
+                                        alert("❌ Failed to initiate Emergency Stop. Please check connection.");
+                                    }
+                                } catch (err) {
+                                    console.error("Emergency Stop Error:", err);
+                                    alert("❌ System Error during Emergency Stop.");
+                                }
+                            }
+                        }}
+                        className="w-full border border-red-900/50 hover:bg-red-900/20 text-red-500 font-bold text-[10px] tracking-widest uppercase py-4 rounded-xl transition-colors"
+                    >
                         Emergency Stop
                     </button>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 bg-[#15121B] h-screen overflow-y-auto">
+            <main className="flex-1 bg-[#0A0A0A] h-screen overflow-y-auto">
                 <Outlet />
             </main>
         </div>
