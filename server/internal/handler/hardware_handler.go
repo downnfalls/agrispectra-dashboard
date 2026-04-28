@@ -6,6 +6,9 @@ import (
 	"sync"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 var (
@@ -151,4 +154,31 @@ func (h *HardwareHandler) EmergencyStop(c *gin.Context) {
 	h.SendCommand(command)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Emergency Stop command sent to hardware"})
+}
+
+// รับรูปภาพจาก ESP32
+func (h *HardwareHandler) UploadImage(c *gin.Context) {
+	file, err := c.FormFile("imageFile")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No image file provided"})
+		return
+	}
+
+	// สร้างโฟลเดอร์ uploads ถ้ายังไม่มี
+	uploadDir := "uploads"
+	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
+		os.Mkdir(uploadDir, os.ModePerm)
+	}
+
+	// สร้างชื่อไฟล์ด้วยเวลา
+	filename := filepath.Join(uploadDir, fmt.Sprintf("capture_%d.jpg", time.Now().Unix()))
+
+	// บันทึกไฟล์
+	if err := c.SaveUploadedFile(file, filename); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save image"})
+		return
+	}
+
+	fmt.Println("📸 [Hardware] Image received and saved to", filename)
+	c.JSON(http.StatusOK, gin.H{"message": "Image uploaded successfully", "filename": filename})
 }

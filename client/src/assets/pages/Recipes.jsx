@@ -406,13 +406,31 @@ export default function Recipes() {
                 const errData = await response.json().catch(() => ({}));
                 console.error("Deploy Error:", errData);
             } else {
-                console.log('Recipe deployed successfully to backend/hardware.');
+                console.log('Recipe deployed successfully to backend.');
             }
+
+            // ส่งตรงไปยัง ESP32 ผ่าน WebSocket ด้วย
+            const wsUrl = 'ws://172.20.10.3:8080';
+            const espWS = new WebSocket(wsUrl);
+            
+            espWS.onopen = () => {
+                console.log("Connected to ESP32 from Recipes. Sending profile...");
+                espWS.send(JSON.stringify(payload));
+                
+                setTimeout(() => {
+                    espWS.close();
+                }, 1000);
+            };
+
+            espWS.onerror = (e) => {
+                console.error("Failed to connect to ESP32 WS from Recipes", e);
+                alert("ไม่สามารถส่งข้อมูลไปที่ ESP32 ได้ กรุณาเช็คการเชื่อมต่อ");
+            };
 
             // Set as deployed once success alert finishes (mock)
             setTimeout(() => {
                 setDeployedProfileId(activeProfile.id);
-                alert('Mock: Recipe deployed successfully to hardware!\nPayload viewable in console.');
+                alert('Recipe deployed successfully to hardware!');
             }, 500);
 
         } catch (error) {

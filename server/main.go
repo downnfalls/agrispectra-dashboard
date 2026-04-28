@@ -63,6 +63,7 @@ func main() {
 
 	r.POST("/auth/register", authHandler.Register)
 	r.POST("/auth/login", authHandler.Login)
+	r.POST("/api/upload-image", hardwareHandler.UploadImage) // สำหรับ ESP32 อัปโหลดรูปภาพ
 
 	apiGroup := r.Group("/api")
 	apiGroup.Use(middleware.AuthMiddleware())

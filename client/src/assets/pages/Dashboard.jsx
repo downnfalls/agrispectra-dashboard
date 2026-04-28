@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import agriImage from './login/resources/Agriculture.png';
 import UserProfile from '../components/UserProfile';
 import { API_BASE_URL } from '../../config';
@@ -10,7 +10,31 @@ function Dashboard() {
     const [dashboardData, setDashboardData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [deployedProfile, setDeployedProfile] = useState(null);
+    const [cameraImage, setCameraImage] = useState(agriImage);
+    const wsRef = useRef(null); // เพิ่ม useRef สำหรับเก็บ WebSocket
 
+    const handleForceReScan = () => {
+        const ip = '172.20.10.3';
+        const imgUrl = `http://${ip}/capture?time=${Date.now()}`;
+        setCameraImage(imgUrl);
+        //------------------------------------------
+// update time when click button
+        const now = new Date();
+        const formattedDate = now.toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+        const formattedTime = now.toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        
+        setDashboardData(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                metadata: {
+                    ...prev.metadata,
+                    lastCapture: `${formattedDate} - ${formattedTime}`
+                }
+            };
+        });
+    };
+//----------------------------------------------------------------------
     useEffect(() => {
         let isComponentMounted = true;
 
@@ -161,11 +185,13 @@ function Dashboard() {
         fetchDashboardData();
 
         // --- WebSocket Real-time Integration ---
-        let socket = null;
         const connectWS = () => {
-            const wsUrl = API_BASE_URL.replace('http', 'ws') + '/hardware/ws';
+            if (wsRef.current) return; // ป้องกันการต่อซ้ำ
+            
+            const wsUrl = 'ws://172.20.10.3:8080';
             console.log("Connecting to WebSocket:", wsUrl);
-            socket = new WebSocket(wsUrl);
+            const socket = new WebSocket(wsUrl);
+            wsRef.current = socket;
 
             socket.onopen = () => console.log("✅ WebSocket Connected");
             
@@ -217,13 +243,18 @@ function Dashboard() {
             };
         };
 
-        connectWS();
+        // ตั้งเวลาเล็กน้อยก่อนต่อ เผื่อ React StrictMode เด้งกลับ
+        const connectTimeout = setTimeout(() => {
+            connectWS();
+        }, 500);
 
         return () => {
             isComponentMounted = false;
-            if (socket) {
+            clearTimeout(connectTimeout);
+            if (wsRef.current) {
                 console.log("Cleaning up WebSocket...");
-                socket.close();
+                wsRef.current.close();
+                wsRef.current = null;
             }
         };
     }, []);
@@ -245,6 +276,21 @@ function Dashboard() {
             </div>
         );
     }
+
+    //----------------- send to esp =======================
+    const sendProfileToESP = (profileData) => {
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            // ถ้าสถานะเป็น OPEN แล้ว ถึงจะยอมส่ง
+            ws.send(JSON.stringify(profileData));
+            console.log("Sent profile to ESP32!");
+        } else {
+            // ถ้ายังเชื่อมไม่ติด หรือโดนตัดไป ให้แจ้งเตือน
+            console.error("WebSocket is not open. Current state:", ws ? ws.readyState : 'null');
+            alert("ยังเชื่อมต่อ ESP32 ไม่สำเร็จ กรุณารอสักครู่หรือรีเฟรชหน้าเว็บ");
+        }
+    };
+
 
     const { metadata, visionInfo, systemLogs, growthState, spectrum, stats } = dashboardData;
 
@@ -275,7 +321,7 @@ function Dashboard() {
                     {/* Big Image Container (Camera View) */}
                     <div className="bg-[#151515] rounded-3xl overflow-hidden relative border border-[#222] h-[480px] p-1 flex flex-col">
                         <div className="relative flex-1 rounded-[1.4rem] overflow-hidden bg-[#1D1A24]">
-                            <img src={agriImage} alt="Canopy" className="w-full h-full object-cover absolute inset-0 opacity-80" />
+                            <img src={cameraImage} alt="Canopy" className="w-full h-full object-cover absolute inset-0 opacity-80" />
                             
                             {/* Coverage Widget */}
                             <div className="absolute top-4 right-4 bg-[#0A0A0A]/80 backdrop-blur-md border border-[#222] p-4 rounded-xl">
@@ -312,7 +358,7 @@ function Dashboard() {
                             <div className="flex-1"></div>
                             <div className="flex flex-col items-end gap-3">
                                 <span className="text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase">Last Capture: {metadata.lastCapture}</span>
-                                <button className="border border-[#97CBFF]/50 text-[#97CBFF] px-6 py-2 rounded-lg font-bold text-[10px] tracking-widest uppercase hover:bg-[#97CBFF]/10 transition">
+                                <button onClick={handleForceReScan} className="border border-[#97CBFF]/50 text-[#97CBFF] px-6 py-2 rounded-lg font-bold text-[10px] tracking-widest uppercase hover:bg-[#97CBFF]/10 transition">
                                     Force Re-Scan
                                 </button>
                             </div>
