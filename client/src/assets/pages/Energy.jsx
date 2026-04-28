@@ -8,6 +8,28 @@ function Energy() {
     const [energyData, setEnergyData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    // --- WebSocket Hardware Status ---
+    const [hardwareStatus, setHardwareStatus] = useState('OFFLINE');
+    useEffect(() => {
+        let socket = null;
+        const connectWS = () => {
+            const wsUrl = 'ws://localhost:8080/hardware/ws'; // Adjust if using API_BASE_URL
+            socket = new WebSocket(wsUrl);
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'connection_status') {
+                        setHardwareStatus(data.status);
+                    }
+                } catch (e) {}
+            };
+            socket.onclose = () => setTimeout(connectWS, 3000);
+            socket.onerror = () => socket.close();
+        };
+        connectWS();
+        return () => { if (socket) socket.close(); };
+    }, []);
+
     useEffect(() => {
         // จำลองการดึงข้อมูลจาก Backend API
         const fetchEnergyData = async () => {
@@ -97,8 +119,8 @@ function Energy() {
                 <h1 className="text-[#CBA6F7] text-3xl font-bold tracking-tight">JANGKOPF</h1>
                 <div className="flex items-center gap-4">
                     <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
-                        <div className="w-2 h-2 rounded-full bg-[#F43F5E] shadow-[0_0_8px_#F43F5E]"></div>
-                        <span className="text-[#E0E0E0] font-bold text-[10px] tracking-widest uppercase">ESP32 CAM ONLINE</span>
+                        <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
+                        <span className="text-[#E0E0E0] font-bold text-[10px] tracking-widest uppercase">ESP32 CAM {hardwareStatus}</span>
                     </div>
                     <UserProfile />
                 </div>

@@ -57,6 +57,28 @@ export default function Recipes() {
     const [profilesSnapshot, setProfilesSnapshot] = useState(null);
 
     const [isLoading, setIsLoading] = useState(false);
+    
+    // --- WebSocket Hardware Status ---
+    const [hardwareStatus, setHardwareStatus] = useState('OFFLINE');
+    useEffect(() => {
+        let socket = null;
+        const connectWS = () => {
+            const wsUrl = API_BASE_URL.replace('http', 'ws') + '/hardware/ws';
+            socket = new WebSocket(wsUrl);
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'connection_status') {
+                        setHardwareStatus(data.status);
+                    }
+                } catch (e) {}
+            };
+            socket.onclose = () => setTimeout(connectWS, 3000);
+            socket.onerror = () => socket.close();
+        };
+        connectWS();
+        return () => { if (socket) socket.close(); };
+    }, []);
 
     // Fetch profiles from server
     const fetchProfiles = async () => {
@@ -107,7 +129,7 @@ export default function Recipes() {
                                     stagesArray.push({
                                         id: stageId,
                                         stageLabel: `STAGE ${stageId}`,
-                                        name: `Imported Stage ${stageId}`,
+                                        name: rawStage.name || `Imported Stage ${stageId}`,
                                         red: rawStage.red || 0,
                                         farRed: rawStage.farRed || 0,
                                         blue: rawStage.blue || 0,
@@ -204,8 +226,28 @@ export default function Recipes() {
                 });
 
                 if (response.ok) {
-                    alert("Recipe Saved to Database successfully!");
                     await fetchProfiles(); // Real-time reload
+                    
+                    // --- Auto-Sync Logic ---
+                    if (deployedProfileId === activeProfile.id) {
+                        console.log("Profile is actively deployed. Auto-syncing with hardware...");
+                        const deployResp = await fetch(`${API_BASE_URL}/api/deploy`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        
+                        if (deployResp.ok) {
+                            alert("Recipe Saved and Auto-Synced to Hardware successfully!");
+                        } else {
+                            alert("Recipe Saved to DB, but failed to auto-sync to hardware.");
+                        }
+                    } else {
+                        alert("Recipe Saved to Database successfully!");
+                    }
                 } else {
                     alert("Failed to save recipe to database. (Status: " + response.status + ")");
                 }
@@ -240,6 +282,7 @@ export default function Recipes() {
             });
 
             payload[stageKey] = {
+                name: stage.name,
                 red: parseInt(stage.red) || 0,
                 farRed: parseInt(stage.farRed) || 0,
                 blue: parseInt(stage.blue) || 0,
@@ -433,8 +476,8 @@ export default function Recipes() {
 
                 <div className="flex items-center gap-4">
                     <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
-                        <div className="w-2 h-2 rounded-full bg-[#34D399] shadow-[0_0_8px_#34D399]"></div>
-                        <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM ONLINE</span>
+                        <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
+                        <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM {hardwareStatus}</span>
                     </div>
                     <UserProfile />
                 </div>

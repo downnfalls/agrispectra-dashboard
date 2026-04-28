@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -90,10 +92,45 @@ func (h *HardwareHandler) ConnectWebSocket(c *gin.Context) {
 
 	// ส่งข้อมูลล่าสุดให้ทันทีที่ต่อสาย (ถ้ามี)
 	esp32StateLock.RLock()
-	if currentESP32State != nil {
-		ws.WriteJSON(currentESP32State)
-	}
+	state := currentESP32State
+	count := len(hardwareClients)
 	esp32StateLock.RUnlock()
+
+	status := "OFFLINE"
+	if count > 0 {
+		status = "ONLINE"
+	}
+
+	ws.WriteJSON(gin.H{
+		"type":   "connection_status",
+		"status": status,
+	})
+
+	if state != nil {
+		ws.WriteJSON(state)
+	}
+}
+
+func (h *HardwareHandler) broadcastConnectionStatus() {
+	esp32StateLock.RLock()
+	count := len(hardwareClients)
+	esp32StateLock.RUnlock()
+
+	status := "OFFLINE"
+	if count > 0 {
+		status = "ONLINE"
+	}
+
+	msg := gin.H{
+		"type":   "connection_status",
+		"status": status,
+	}
+
+	esp32StateLock.Lock()
+	for client := range clients {
+		client.WriteJSON(msg)
+	}
+	esp32StateLock.Unlock()
 }
 
 // ฝั่ง ESP32 จะเชื่อมต่อมาที่นี่เพื่อรอรับคำสั่ง (Profile, Control)
@@ -105,10 +142,62 @@ func (h *HardwareHandler) ConnectCommandWS(c *gin.Context) {
 
 	esp32StateLock.Lock()
 	hardwareClients[ws] = true
+	total := len(hardwareClients)
 	esp32StateLock.Unlock()
 
-	fmt.Println("🛰 [Hardware] ESP32 Connected to Command Channel")
+	h.broadcastConnectionStatus()
+
+	clientIP := c.ClientIP()
+	fmt.Printf("🛰 [Hardware] ESP32 Connected! IP: %s | Total Active Devices: %d\n", clientIP, total)
+
+	// สร้าง Goroutine มารอฟังการตัดการเชื่อมต่อ (ถ้า ESP32 หายไปจะได้รู้ทันที)
+	
+	// ล็อกเวลาถ้าไม่มี Ping-Pong (ตัดการเชื่อมต่ออัตโนมัติภายใน 15 วินาทีถ้าไม่ได้ PONG)
+	ws.SetReadDeadline(time.Now().Add(15 * time.Second))
+	ws.SetPongHandler(func(string) error {
+		ws.SetReadDeadline(time.Now().Add(15 * time.Second))
+		return nil
+	})
+
+	// Ticker Goroutine สำหรับส่ง PING ไปหา ESP32 ทุกๆ 10 วินาที
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			esp32StateLock.Lock()
+			if _, exists := hardwareClients[ws]; !exists {
+				esp32StateLock.Unlock()
+				break
+			}
+			err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second))
+			esp32StateLock.Unlock()
+
+			if err != nil {
+				// ส่งขัดข้องแปลว่าสายหลุด
+				break
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			// อ่านเพื่อเช็คว่าสายยังอยู่ไหม (และรอรับ Pong)
+			if _, _, err := ws.NextReader(); err != nil {
+				esp32StateLock.Lock()
+				if _, exists := hardwareClients[ws]; exists {
+					delete(hardwareClients, ws)
+					fmt.Printf("❌ [Hardware] ESP32 Disconnected! IP: %s | Remaining Devices: %d\n", clientIP, len(hardwareClients))
+				}
+				esp32StateLock.Unlock()
+
+				h.broadcastConnectionStatus()
+				ws.Close()
+				break
+			}
+		}
+	}()
 }
+
 
 // ใช้สำหรับส่งข้อมูล (JSON) ไปยัง ESP32 ทุกตัวที่ต่อสายอยู่
 func (h *HardwareHandler) SendCommand(command interface{}) {
@@ -151,4 +240,16 @@ func (h *HardwareHandler) EmergencyStop(c *gin.Context) {
 	h.SendCommand(command)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Emergency Stop command sent to hardware"})
+}
+
+// สั่งให้ ESP32 บังคับส่งข้อมูลมาใหม่
+func (h *HardwareHandler) ForceRescan(c *gin.Context) {
+	command := gin.H{
+		"action":  "FORCE_RESCAN",
+		"message": "Immediate status update requested from dashboard",
+	}
+
+	h.SendCommand(command)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Force Re-Scan command sent to hardware"})
 }

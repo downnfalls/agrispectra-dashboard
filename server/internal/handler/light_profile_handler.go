@@ -133,6 +133,9 @@ func (h *LightProfileHandler) DeployProfile(c *gin.Context) {
 	// 1. ดึงชื่อ Profile
 	profileName, _ := payload["profile_name"].(string)
 
+	// เพิ่ม action parameter เพื่อให้ ESP32 รู้ว่าเป็นคำสั่งอะไร
+	payload["action"] = "DEPLOY_PROFILE"
+
 	// 2. ส่งข้อมูลทั้ง Payload (สูตรไฟ) ไปยัง ESP32 ผ่าน WebSocket ของจริง
 	h.hardwareHandler.SendCommand(payload)
 	

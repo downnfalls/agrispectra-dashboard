@@ -10,6 +10,9 @@ function Dashboard() {
     const [dashboardData, setDashboardData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [deployedProfile, setDeployedProfile] = useState(null);
+    
+    // --- WebSocket Hardware Status ---
+    const [hardwareStatus, setHardwareStatus] = useState('OFFLINE');
 
     useEffect(() => {
         let isComponentMounted = true;
@@ -114,7 +117,7 @@ function Dashboard() {
                 };
 
                 const mockApiResponse = {
-                    metadata: { batchId: "L-8821", cycleProgress: 84, cameraStatus: "ONLINE", lastCapture: "Aug 25, 2026 - 14:15:39" },
+                    metadata: { batchId: "L-8821", cycleProgress: 84, lastCapture: "Aug 25, 2026 - 14:15:39" },
                     visionInfo: {
                         canopyCoverage: 72,
                         plants: [
@@ -172,6 +175,13 @@ function Dashboard() {
             socket.onmessage = (event) => {
                 try {
                     const newPayload = JSON.parse(event.data);
+                    
+                    // --- NEW LOGIC: Handle Connection Status Update ---
+                    if (newPayload.type === 'connection_status') {
+                        setHardwareStatus(newPayload.status);
+                        return;
+                    }
+
                     console.log("📥 WS Message Received:", newPayload);
                     const processed = processPayload(newPayload, currentProfile);
                     
@@ -228,6 +238,25 @@ function Dashboard() {
         };
     }, []);
 
+    const handleForceRescan = async () => {
+        try {
+            const token = sessionStorage.getItem('token');
+            const response = await fetch(`${API_BASE_URL}/api/hardware/force-rescan`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                console.log("Force Re-Scan command sent successfully.");
+            } else {
+                console.error("Failed to send Force Re-Scan command.");
+            }
+        } catch (error) {
+            console.error("Error sending Force Re-Scan command:", error);
+        }
+    };
+
     // Helper สำหรับสร้างสไตล์สีของก้อน Log
     const getLogStyle = (type) => {
         let textBase = type === 'CALIBRATION' ? 'text-[#97CBFF]' : 
@@ -259,8 +288,8 @@ function Dashboard() {
 
                 <div className="flex items-center gap-4">
                     <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
-                        <div className={`w-2 h-2 rounded-full ${metadata.cameraStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
-                        <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM {metadata.cameraStatus}</span>
+                        <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
+                        <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM {hardwareStatus}</span>
                     </div>
                     <UserProfile />
                 </div>
@@ -276,35 +305,6 @@ function Dashboard() {
                     <div className="bg-[#151515] rounded-3xl overflow-hidden relative border border-[#222] h-[480px] p-1 flex flex-col">
                         <div className="relative flex-1 rounded-[1.4rem] overflow-hidden bg-[#1D1A24]">
                             <img src={agriImage} alt="Canopy" className="w-full h-full object-cover absolute inset-0 opacity-80" />
-                            
-                            {/* Coverage Widget */}
-                            <div className="absolute top-4 right-4 bg-[#0A0A0A]/80 backdrop-blur-md border border-[#222] p-4 rounded-xl">
-                                <p className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-1">Canopy Coverage</p>
-                                <p className="text-[#97CBFF] text-4xl font-bold text-right">{visionInfo.canopyCoverage}%</p>
-                            </div>
-
-                            {/* Bounding Boxes rendering from state */}
-                            {visionInfo.plants.map((plant, index) => {
-                                // แปลงค่า x, y เป็น CSS style เพื่อจัดตำแหน่ง
-                                const positioning = {
-                                    top: plant.position.top != null ? `${plant.position.top}%` : undefined,
-                                    bottom: plant.position.bottom != null ? `${plant.position.bottom}%` : undefined,
-                                    left: plant.position.left != null ? `${plant.position.left}%` : undefined,
-                                    right: plant.position.right != null ? `${plant.position.right}%` : undefined,
-                                };
-                                return (
-                                    <div key={index} className="absolute border border-[#34D399] bg-[#34D399]/10" 
-                                         style={{ 
-                                            ...positioning, 
-                                            width: `${plant.size.width}px`, 
-                                            height: `${plant.size.height}px` 
-                                         }}>
-                                        <span className="absolute -top-5 left-0 bg-[#34D399]/20 text-[#34D399] text-[9px] px-2 py-0.5 border border-[#34D399] font-mono whitespace-nowrap">
-                                            {plant.id} [{plant.confidence}%]
-                                        </span>
-                                    </div>
-                                );
-                            })}
                         </div>
 
                         {/* Capture Controls Bar */}
@@ -312,7 +312,7 @@ function Dashboard() {
                             <div className="flex-1"></div>
                             <div className="flex flex-col items-end gap-3">
                                 <span className="text-[#97CBFF] font-bold text-[10px] tracking-widest uppercase">Last Capture: {metadata.lastCapture}</span>
-                                <button className="border border-[#97CBFF]/50 text-[#97CBFF] px-6 py-2 rounded-lg font-bold text-[10px] tracking-widest uppercase hover:bg-[#97CBFF]/10 transition">
+                                <button onClick={handleForceRescan} className="border border-[#97CBFF]/50 text-[#97CBFF] px-6 py-2 rounded-lg font-bold text-[10px] tracking-widest uppercase hover:bg-[#97CBFF]/10 transition cursor-pointer">
                                     Force Re-Scan
                                 </button>
                             </div>
