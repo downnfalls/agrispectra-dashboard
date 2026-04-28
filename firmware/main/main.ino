@@ -1,12 +1,10 @@
 #include <WiFi.h>
 #include "time.h"
 #include <ArduinoJson.h>
-#include <WebSocketsServer.h>
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
 #include <Preferences.h>
-#include <WebServer.h>
-#include <HTTPClient.h>
+#include <WebSocketsClient.h>
 
 #include <Adafruit_TSL2591.h>
 
@@ -14,21 +12,19 @@
 #include "esp_camera.h"
 #undef sensor_t
 
-
+// ========= WebSocket Client ============
+WebSocketsClient webSocket;
+const char *server_ip = "172.20.10.2";
 
 // ===========================
 // Select camera model in board_config.h
 // ===========================
 #include "board_config.h"
 Preferences preferences;
+
 // ===========================
 // tsl light sensor
 Adafruit_TSL2591 tsl = Adafruit_TSL2591(2591);
-WebServer server(80);
-
-
-
-
 
 // ===========================
 // Enter your WiFi credentials
@@ -41,9 +37,6 @@ const char *password = "12345678";
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 7 * 3600; // Timezone +7
 const int   daylightOffset_sec = 0;
-
-// ===========================
-WebSocketsServer webSocket = WebSocketsServer(8080);
 
 // ===========================
 // PIN & PWM Configuration with PCA9685
@@ -78,21 +71,18 @@ struct StageConfig {
 StageConfig savedStages[10];
 int totalStages = 0;
   
-
-
 // ===========================
 // example value from model AL  
-
 int current_leaf_count = 0;
 int current_leaf_density = 0;
 int active_ai_stage_idx = 0;
+
 // ===========================
 unsigned long lastPhotoTime = 0;
 const unsigned long PHOTO_INTERVAL = 3600000; 
 
 // PWM เดิม
 int base_pwm_red = 0, base_pwm_blue = 0, base_pwm_white = 0, base_pwm_far_red = 0;
-
 
 // ===========================
 // Max PPFD Eff 75%
@@ -102,9 +92,6 @@ const float MAX_PPFD_FAR_RED = 65.0025;
 const float MAX_PPFD_BLUE = 125.0025;
 
 // ===========================
-
-
-
 
 // Light control fn (ratio, periodValue 1-100%)
 void updateLights(int stageIdx, int targetPPFD) {
@@ -129,7 +116,6 @@ void updateLights(int stageIdx, int targetPPFD) {
   setPWM_8bit(1, base_pwm_blue);
   setPWM_8bit(2, base_pwm_red);
   setPWM_8bit(3, base_pwm_far_red);
-
   
   delay(100); 
 
@@ -205,8 +191,7 @@ void checkPeriodTimer() {
   }
 }
 
-bool isCapturing = false; // ตัวแปรล็อคป้องกันการกดถ่ายรัวๆ
-#include <HTTPClient.h> // อย่าลืมใส่ไว้ด้านบนสุดของไฟล์ด้วยนะครับ
+bool isCapturing = false;
 
 void captureAndSendAnalysis() {
   if (isCapturing) {
@@ -222,7 +207,7 @@ void captureAndSendAnalysis() {
   Serial.printf("[CAM] Mockup: leaf_count=%d, leaf_density=%d\n", 
                 current_leaf_count, current_leaf_density);
 
-  // --- ส่ง Analysis JSON กลับไปหาเว็บ ---
+  // --- สร้าง Analysis JSON (ตอนนี้พิมพ์ลง Serial อย่างเดียว) ---
   DynamicJsonDocument doc(512);
   doc["stage"] = (totalStages > 0) ? savedStages[active_ai_stage_idx].stageName : "No-Stage";
   doc["leaf_count"] = current_leaf_count;
@@ -230,13 +215,12 @@ void captureAndSendAnalysis() {
 
   String jsonPayload;
   serializeJson(doc, jsonPayload);
-  webSocket.broadcastTXT(jsonPayload);
-  Serial.println("[CAM] Analysis Sent: " + jsonPayload);
+  Serial.println("[CAM] Analysis Generated (Ready for Client Tx): " + jsonPayload);
 
   // --- ประเมินว่า Stage ต้องเปลี่ยนไหม ---
   evaluateStageFromAI();
 
-  // --- ถ่ายรูปและอัปโหลดไปหา Go Server ---
+  // --- ถ่ายรูป ---
   Serial.println("[CAM] Capturing image...");
   camera_fb_t * fb = esp_camera_fb_get();
   if (fb) { esp_camera_fb_return(fb); delay(50); }
@@ -247,63 +231,18 @@ void captureAndSendAnalysis() {
     isCapturing = false;
     return;
   }
-
-  HTTPClient http;
-  http.begin("http://172.20.10.3:8080/api/upload-image"); // แก้ IP ด้วย
-  http.addHeader("Content-Type", "image/jpeg");
-  int httpCode = http.POST(fb->buf, fb->len);
   
-  if (httpCode > 0) Serial.printf("[CAM] Upload OK! HTTP: %d\n", httpCode);
-  else Serial.printf("[CAM] Upload FAILED: %s\n", http.errorToString(httpCode).c_str());
+  Serial.printf("[CAM] Picture taken! Size: %zu bytes\n", fb->len);
 
-  http.end();
+  // ==========================================
+  // TODO: เขียนโค้ดสำหรับส่งรูปภาพ (fb->buf, fb->len) ใหม่ตรงนี้
+  // ==========================================
+  
+
   esp_camera_fb_return(fb);
   Serial.println("[CAM] === Done ===\n");
   isCapturing = false;
 }
-
-
-void handleCapture() {
-  // ถ้ากำลังถ่ายอยู่ ให้ปฏิเสธคำขอใหม่ทันที
-  if (isCapturing) {
-    Serial.println("Server is busy capturing. Ignoring request.");
-    server.send(503, "text/plain", "Server is busy. Please try again later.");
-    return;
-  }
-  
-  isCapturing = true; // ล็อค
-  Serial.println("HTTP Capture Request");
-
-  // 1. ล้างบัฟเฟอร์ภาพเก่า
-  camera_fb_t * fb = esp_camera_fb_get();
-  if (fb) {
-    esp_camera_fb_return(fb);
-    delay(50);
-  }
-
-  // 2. ดึงภาพใหม่ล่าสุดจริงๆ
-  fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    server.send(500, "text/plain", "Camera capture failed");
-    isCapturing = false; // ปลดล็อคเมื่อเกิด Error
-    return;
-  }
-
-  // 3. ส่งภาพกลับไปที่หน้าเว็บ
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.setContentLength(fb->len);
-  server.send(200, "image/jpeg", "");
-  server.client().write(fb->buf, fb->len);
-
-  esp_camera_fb_return(fb);
-  Serial.println("Capture sent successfully!");
-  
-  isCapturing = false; // ปลดล็อคเมื่อเสร็จสิ้น
-}
-
-
-
 
 // ===========================
 void evaluateStageFromAI() {
@@ -333,7 +272,6 @@ void evaluateStageFromAI() {
     Serial.println("[STAGE] No change needed.");
   }
 }
-
 
 // feedback loop 
 void adjustLightAndSendTelemetry(int targetTotalPPFD) {
@@ -376,7 +314,7 @@ void adjustLightAndSendTelemetry(int targetTotalPPFD) {
   delay(100);
   actual_total_ppfd = (tsl.getFullLuminosity() & 0xFFFF) * conversion_factor;
 
-  // สร้าง JSON แบบ flat ตามรูปแบบที่ขอ
+  // สร้าง JSON แบบ flat (ตอนนี้พิมพ์ลง Serial อย่างเดียว)
   DynamicJsonDocument doc(1024);
   doc["total"] = actual_total_ppfd;
 
@@ -398,12 +336,9 @@ void adjustLightAndSendTelemetry(int targetTotalPPFD) {
 
   String outputPayload;
   serializeJson(doc, outputPayload);
-  webSocket.broadcastTXT(outputPayload);
-  Serial.println("[LIGHT] Telemetry Sent: " + outputPayload);
+  Serial.println("[LIGHT] Telemetry Generated (Ready for Client Tx): " + outputPayload);
 }
 
-// ===========================
-// WebSocket Event Handler
 // ===========================
 bool parseAndApplyJSON(String jsonString) {
   DynamicJsonDocument doc(4096); 
@@ -419,7 +354,7 @@ bool parseAndApplyJSON(String jsonString) {
   for (JsonPair kv : root) {
     String keyName = kv.key().c_str();
 
-    // 💡 ข้าม Key ที่ไม่ใช่ Stage (ไม่งั้นจะพังถ้าเจอ profile_id)
+    // ข้าม Key ที่ไม่ใช่ Stage
     if (keyName == "profile_id" || keyName == "profile_name" || keyName == "action") {
       Serial.println("Skipped Non-Stage Key: " + keyName);
       continue; 
@@ -473,53 +408,30 @@ bool parseAndApplyJSON(String jsonString) {
   return true;
 }
 
-
-
-
-// ===========================
-// websocket message 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
-  if (type == WStype_TEXT) {
-    String jsonString = (char*)payload;
-    
-    // 💡 ปริ้นข้อความดิบๆ ที่รับมาออก Serial Monitor ให้เห็นก่อนเลยว่ารับอะไรมา
-    Serial.println("\n[WebSocket] Received Payload:");
-    Serial.println(jsonString);
-
-    DynamicJsonDocument doc(4096); 
-    DeserializationError error = deserializeJson(doc, jsonString);
-
-    if (error) {
-      Serial.print("❌ [WebSocket] JSON Parsing Failed: ");
-      Serial.println(error.c_str());
-      return;
-    }
-    
-    // กรณี Server สั่งให้กดถ่ายภาพแมนนวล
-    if (doc.containsKey("action") && doc["action"] == "capture") {
-      Serial.println("📸 Manual Capture Triggered from Web");
-      captureAndSendAnalysis();  
-      return;
-    }
-
-    // ถ้ารับ Profile Config อันใหม่
-     if (!doc.containsKey("action")) { 
-      Serial.println("[WS] Received new Profile config");
-        preferences.begin("my-app", false); 
-        preferences.clear(); 
-        preferences.putString("config", jsonString); 
-        preferences.end();
-        Serial.println("[WS] Config saved to Flash!");
-        
-        // ถ่ายรูปและวิเคราะห์ทันทีหลังรับ Profile ใหม่
-        captureAndSendAnalysis();
-      }
-    }
-
+void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+  switch(type) {
+    case WStype_DISCONNECTED:
+      Serial.println("🔴 [WS] Disconnected from Go Server");
+      break;
+      
+    case WStype_CONNECTED:
+      Serial.println("🟢 [WS] Connected to Go Server!");
+      break;
+      
+    case WStype_TEXT:
+      // ปริ้นข้อความดิบๆ ที่ Go ส่งมาออกทางหน้าจอเลย
+      Serial.printf("📥 [WS] Raw Message Received: %s\n", payload);
+      break;
+      
+    case WStype_PING:
+      Serial.println("🏓 [WS] Received PING from Server");
+      break;
+      
+    case WStype_PONG:
+      Serial.println("🏓 [WS] Received PONG from Server");
+      break;
   }
-
-
-
+}
 
 void setup() {
   Serial.begin(115200);
@@ -542,11 +454,7 @@ void setup() {
     Serial.println("No TSL2591 sensor found ... check your wiring?");
   } else {
     Serial.println("Found TSL2591 sensor");
-    
-    // (Gain) -> ไฟปลูกต้นไม้สว่างมาก ให้ใช้แบบ LOW (1x)
     tsl.setGain(TSL2591_GAIN_LOW); 
-    
-    // ตั้งค่าเวลาในการรวบรวมแสง (Integration Time) -> ใช้ 100ms เพื่อให้ตอบสนองเร็วพอดีกับ Delay ในลูปชดเชยแสง
     tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS); 
   }
 
@@ -600,7 +508,7 @@ void setup() {
     Serial.printf("Camera init failed with error 0x%x\n", err);
     Serial.println("Restarting ESP32 in 3 seconds...");
     delay(3000);
-    ESP.restart(); // รีสตาร์ทบอร์ดเลยถ้ากล้องมีปัญหา จะได้เคลียร์ RAM และเชื่อมต่อใหม่
+    ESP.restart(); 
   }
 
   esp_camera_sensor_t *s = esp_camera_sensor_get();
@@ -627,34 +535,31 @@ void setup() {
   Serial.print("Device IP: ");
   Serial.println(WiFi.localIP());
 
-  server.on("/capture", HTTP_GET, handleCapture);
-  server.begin();
-  Serial.println("HTTP Capture server started");
-
   // --- Setup Time (NTP) --- 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   Serial.println("NTP Time configured.");
 
   // --- Load Preferences at Startup ---
-  preferences.begin("my-app", true); // true = Read Only (โหลดอย่างเดียว)
+  preferences.begin("my-app", true); 
   String savedJson = preferences.getString("config", "{}");
   preferences.end();
 
   if (savedJson != "{}") {
     Serial.println("\n--- Loading Saved Config from Flash ---");
     parseAndApplyJSON(savedJson);
-     Serial.println("-> Successfully loaded and applied saved config");
+    Serial.println("-> Successfully loaded and applied saved config");
   } else {
     Serial.println("\n--- No Saved Config Found in Flash ---");
   }
 
-  // --- Start WebSocket ---
-  webSocket.begin();
+
+  // WebSocket init
+  webSocket.begin(server_ip, 8080, "/");
   webSocket.onEvent(webSocketEvent);
-  Serial.println("WebSocket Server started on port 8080");
+  webSocket.setReconnectInterval(5000);
 }
 
-unsigned long lastWiFiCheck = 0; // เพิ่มตัวแปรนี้ไว้ก่อนถึง loop()
+unsigned long lastWiFiCheck = 0; 
 
 void loop() {
   // เช็คสถานะ WiFi ทุกๆ 10 วินาที ถ้าหลุดให้พยายามต่อใหม่
@@ -664,18 +569,13 @@ void loop() {
     WiFi.reconnect(); 
     lastWiFiCheck = millis();
   }
-
-  webSocket.loop();    
+   
   checkPeriodTimer();  
 
-  // จับเวลาทุกๆ 1 ชั่วโมงถ่ายรูป (3600000 ms)
   // จับเวลาทุกๆ 1 ชั่วโมงถ่ายรูป (3600000 ms)
   if (millis() - lastPhotoTime >= PHOTO_INTERVAL) {
     lastPhotoTime = millis();
     Serial.println("Auto Capture Triggered (1 Hour Interval)");
-    captureAndSendAnalysis(); // <--- เรียกตรงนี้
+    captureAndSendAnalysis(); 
   }
-
-
-  server.handleClient();
 }
