@@ -5,7 +5,7 @@
 #include <Adafruit_PWMServoDriver.h>
 #include <Preferences.h>
 #include <WebSocketsClient.h>
-
+#include <HTTPClient.h>
 #include <Adafruit_TSL2591.h>
 
 #define sensor_t esp_camera_sensor_t
@@ -14,7 +14,7 @@
 
 // ========= WebSocket Client ============
 WebSocketsClient webSocket;
-const char *server_ip = "172.20.10.2";
+const char *server_ip = "172.20.10.5";
 
 // ===========================
 // Select camera model in board_config.h
@@ -120,7 +120,7 @@ void updateLights(int stageIdx, int targetPPFD) {
   delay(100); 
 
   // check
-  adjustLightAndSendTelemetry(targetPPFD);
+//  adjustLightAndSendTelemetry(targetPPFD);
 }
 
 // ===========================
@@ -218,7 +218,7 @@ void captureAndSendAnalysis() {
   Serial.println("[CAM] Analysis Generated (Ready for Client Tx): " + jsonPayload);
 
   // --- ประเมินว่า Stage ต้องเปลี่ยนไหม ---
-  evaluateStageFromAI();
+//  evaluateStageFromAI();
 
   // --- ถ่ายรูป ---
   Serial.println("[CAM] Capturing image...");
@@ -293,7 +293,7 @@ void adjustLightAndSendTelemetry(int targetTotalPPFD) {
   Serial.println("[LIGHT] Starting compensation loop...");
   for (int step = 0; step <= 50; step++) {
     uint32_t lum = tsl.getFullLuminosity();
-    actual_total_ppfd = (lum & 0xFFFF) * conversion_factor;
+    actual_total_ppfd = (lum & 0xFFFF) / conversion_factor;
 
     if (actual_total_ppfd >= targetTotalPPFD * 0.98) {
       Serial.printf("[LIGHT] Target reached at step %d (%.2f PPFD)\n", 
@@ -433,6 +433,29 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   }
 }
 
+void sendTelemetryToServer() {
+  HTTPClient http;
+  
+  // เปลี่ยน IP เป็นของเครื่อง Server
+  http.begin("http://" + String(server_ip) + ":8080/hardware/state");
+  http.addHeader("Content-Type", "application/json");
+
+  // สร้าง JSON String ตามโครงสร้าง
+  String payload = "{\"stage\": \"Stage 1\", \"leaf_count\": 22, \"leaf_density\": 85, \"total\": 350.0, \"white\": {\"value\": 120, \"diff\": 50}, \"blue\": {\"value\": 80, \"diff\": -2}, \"red\": {\"value\": 100, \"diff\": 0}, \"farRed\": {\"value\": 50, \"diff\": 0}}";
+
+  int httpResponseCode = http.POST(payload);
+  
+  if (httpResponseCode > 0) {
+    Serial.print("Telemetry Sent! Response code: ");
+    Serial.println(httpResponseCode);
+  } else {
+    Serial.print("Error sending telemetry: ");
+    Serial.println(httpResponseCode);
+  }
+  
+  http.end();
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
@@ -554,14 +577,19 @@ void setup() {
 
 
   // WebSocket init
-  webSocket.begin(server_ip, 8080, "/");
+  webSocket.begin(server_ip, 8080, "/hardware/command");
   webSocket.onEvent(webSocketEvent);
   webSocket.setReconnectInterval(5000);
+
+  Serial.println("websocket setup complete");
 }
 
 unsigned long lastWiFiCheck = 0; 
 
+unsigned long lastPeriod = 0;
+
 void loop() {
+  
   // เช็คสถานะ WiFi ทุกๆ 10 วินาที ถ้าหลุดให้พยายามต่อใหม่
   if (WiFi.status() != WL_CONNECTED && millis() - lastWiFiCheck > 10000) {
     Serial.println("WiFi disconnected! Trying to reconnect...");
@@ -569,7 +597,7 @@ void loop() {
     WiFi.reconnect(); 
     lastWiFiCheck = millis();
   }
-   
+  webSocket.loop();
   checkPeriodTimer();  
 
   // จับเวลาทุกๆ 1 ชั่วโมงถ่ายรูป (3600000 ms)
@@ -577,5 +605,10 @@ void loop() {
     lastPhotoTime = millis();
     Serial.println("Auto Capture Triggered (1 Hour Interval)");
     captureAndSendAnalysis(); 
+  }
+
+  if (millis() - lastPeriod >= 5000) {
+    lastPeriod = millis();
+    sendTelemetryToServer();  
   }
 }
