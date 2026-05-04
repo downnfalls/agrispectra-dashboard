@@ -8,6 +8,38 @@ const normalizeRatios = (b, r, fr, w) => {
     return { b, r, fr, w }; // Returning raw values, adjusting them separately in logic if needed
 };
 
+const HW_LIMITS = {
+    blue: 125.0025,
+    red: 381.0,
+    farRed: 65.0025,
+    white: 112.5
+};
+
+const checkProfilePPFDLimit = (profile) => {
+    if (!profile || !profile.stages) return null;
+    for (let i = 0; i < profile.stages.length; i++) {
+        const stage = profile.stages[i];
+        const total = (parseInt(stage.blue)||0) + (parseInt(stage.red)||0) + (parseInt(stage.farRed)||0) + (parseInt(stage.white)||0) || 0;
+        const normBlue = total > 0 ? Math.round((parseInt(stage.blue)||0) / total * 100) : 0;
+        const normRed = total > 0 ? Math.round((parseInt(stage.red)||0) / total * 100) : 0;
+        const normFarRed = total > 0 ? Math.round((parseInt(stage.farRed)||0) / total * 100) : 0;
+        const normWhite = total > 0 ? 100 - normBlue - normRed - normFarRed : 0;
+        
+        let maxAchievablePPFD = Infinity;
+        if (normBlue > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.blue / (normBlue / 100));
+        if (normRed > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.red / (normRed / 100));
+        if (normFarRed > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.farRed / (normFarRed / 100));
+        if (normWhite > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.white / (normWhite / 100));
+        if (maxAchievablePPFD === Infinity) maxAchievablePPFD = 0;
+        
+        const reqPPFD = parseInt(stage.lightIntensity) || 0;
+        if (reqPPFD > maxAchievablePPFD && maxAchievablePPFD > 0) {
+            return { stageIndex: i, stageName: stage.name ? stage.name.split('\n')[0] : `Stage ${i+1}`, maxAchievablePPFD };
+        }
+    }
+    return null;
+};
+
 export default function Recipes() {
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [profiles, setProfiles] = useState(() => {
@@ -57,7 +89,7 @@ export default function Recipes() {
     const [profilesSnapshot, setProfilesSnapshot] = useState(null);
 
     const [isLoading, setIsLoading] = useState(false);
-    
+
     // --- WebSocket Hardware Status ---
     const [hardwareStatus, setHardwareStatus] = useState('OFFLINE');
     useEffect(() => {
@@ -71,7 +103,7 @@ export default function Recipes() {
                     if (data.type === 'connection_status') {
                         setHardwareStatus(data.status);
                     }
-                } catch (e) {}
+                } catch (e) { }
             };
             socket.onclose = () => setTimeout(connectWS, 3000);
             socket.onerror = () => socket.close();
@@ -136,8 +168,7 @@ export default function Recipes() {
                                         white: rawStage.white || 0,
                                         leafCount: rawStage.leaf || 8,
                                         useLeafCount: rawStage.leaf !== null,
-                                        diameter: rawStage.leaf_density || 12,
-                                        useDiameter: rawStage.leaf_density !== null,
+                                        // leaf_density removed
                                         lightIntensity: rawStage.ppfd || 0,
                                         timeline: timeline.length > 0 ? timeline : undefined
                                     });
@@ -199,8 +230,16 @@ export default function Recipes() {
         setProfilesSnapshot(null);
     };
 
+
+
     const handleSaveChanges = async () => {
         if (activeProfile) {
+            const limitCheck = checkProfilePPFDLimit(activeProfile);
+            if (limitCheck) {
+                alert(`ไม่สามารถบันทึกได้ เนื่องจาก "${limitCheck.stageName}" ตั้งค่า PPFD รวมสูงเกินกว่าที่สัดส่วนแสงปัจจุบันจะทำได้ (ทำได้สูงสุด ${Math.floor(limitCheck.maxAchievablePPFD)} PPFD)`);
+                return;
+            }
+
             // Check for duplicate name (case-insensitive)
             const isDuplicate = profiles.some(p =>
                 p.name.trim().toLowerCase() === activeProfile.name.trim().toLowerCase() &&
@@ -227,7 +266,7 @@ export default function Recipes() {
 
                 if (response.ok) {
                     await fetchProfiles(); // Real-time reload
-                    
+
                     // --- Auto-Sync Logic ---
                     if (deployedProfileId === activeProfile.id) {
                         console.log("Profile is actively deployed. Auto-syncing with hardware...");
@@ -239,7 +278,7 @@ export default function Recipes() {
                             },
                             body: JSON.stringify(payload)
                         });
-                        
+
                         if (deployResp.ok) {
                             alert("Recipe Saved and Auto-Synced to Hardware successfully!");
                         } else {
@@ -278,17 +317,30 @@ export default function Recipes() {
                 { id: 3, time: '00:00', status: 'OFF', intensity: 0 }
             ];
             timeline.forEach(seg => {
-                period[seg.time] = seg.status === 'ACTIVE' ? (parseInt(seg.intensity) || 0) : 0;
+                let intensity = parseInt(seg.intensity) || 0;
+                if (intensity > 100) intensity = 100;
+                if (intensity < 0) intensity = 0;
+                period[seg.time] = seg.status === 'ACTIVE' ? intensity : 0;
             });
+
+            let sBlue = parseInt(stage.blue) || 0;
+            let sRed = parseInt(stage.red) || 0;
+            let sFarRed = parseInt(stage.farRed) || 0;
+            let sWhite = parseInt(stage.white) || 0;
+
+            const total = sBlue + sRed + sFarRed + sWhite || 0;
+            const normBlue = total > 0 ? Math.round((sBlue / total) * 100) : 0;
+            const normRed = total > 0 ? Math.round((sRed / total) * 100) : 0;
+            const normFarRed = total > 0 ? Math.round((sFarRed / total) * 100) : 0;
+            const normWhite = total > 0 ? 100 - normBlue - normRed - normFarRed : 0;
 
             payload[stageKey] = {
                 name: stage.name,
-                red: parseInt(stage.red) || 0,
-                farRed: parseInt(stage.farRed) || 0,
-                blue: parseInt(stage.blue) || 0,
-                white: parseInt(stage.white) || 0,
+                red: normRed,
+                farRed: normFarRed,
+                blue: normBlue,
+                white: normWhite,
                 leaf: stage.useLeafCount !== false ? (parseInt(stage.leafCount) || null) : null,
-                leaf_density: stage.useDiameter !== false ? (parseInt(stage.diameter) || 12) : null,
                 ppfd: parseInt(stage.lightIntensity) || 0,
                 period: period
             };
@@ -429,6 +481,12 @@ export default function Recipes() {
     const handleDeployProfile = async () => {
         if (!activeProfile) return;
 
+        const limitCheck = checkProfilePPFDLimit(activeProfile);
+        if (limitCheck) {
+            alert(`ไม่สามารถ Deploy ได้ เนื่องจาก "${limitCheck.stageName}" ตั้งค่า PPFD รวมสูงเกินกว่าที่สัดส่วนแสงปัจจุบันจะทำได้ (ทำได้สูงสุด ${Math.floor(limitCheck.maxAchievablePPFD)} PPFD)`);
+            return;
+        }
+
         setIsDeploying(true);
         try {
             const payload = buildProfilePayload(activeProfile);
@@ -443,7 +501,7 @@ export default function Recipes() {
                 },
                 body: JSON.stringify(payload)
             });
-            
+
             if (!response.ok) {
                 console.warn('Backend rejected the recipe payload. Ensure backend is running and endpoint matches.');
                 const errData = await response.json().catch(() => ({}));
@@ -506,8 +564,8 @@ export default function Recipes() {
                                     key={profile.id}
                                     onClick={() => setActiveProfileId(profile.id)}
                                     className={`group relative flex flex-col justify-center px-5 py-3 rounded-2xl border cursor-pointer transition-all duration-200 min-w-[180px] h-20 ${isActive
-                                            ? 'border-[#3B82F6] bg-gradient-to-br from-[#3B82F6]/10 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.15)]'
-                                            : 'border-[#222] hover:border-[#3B82F6]/50 bg-[#111]'
+                                        ? 'border-[#3B82F6] bg-gradient-to-br from-[#3B82F6]/10 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+                                        : 'border-[#222] hover:border-[#3B82F6]/50 bg-[#111]'
                                         }`}
                                 >
                                     {/* Delete button (shows on hover) */}
@@ -632,8 +690,12 @@ export default function Recipes() {
 
 function StageCard({ stage, onUpdate, onModify }) {
 
-    // We treat values simply as numbers
-    const total = stage.blue + stage.red + stage.farRed + stage.white || 1;
+    // Normalize ratios to sum to 100
+    const total = stage.blue + stage.red + stage.farRed + stage.white || 0;
+    const normBlue = total > 0 ? Math.round((stage.blue / total) * 100) : 0;
+    const normRed = total > 0 ? Math.round((stage.red / total) * 100) : 0;
+    const normFarRed = total > 0 ? Math.round((stage.farRed / total) * 100) : 0;
+    const normWhite = total > 0 ? 100 - normBlue - normRed - normFarRed : 0;
 
     return (
         <div className="w-[360px] lg:w-[400px] shrink-0 border border-[#222] rounded-[2rem] bg-[#111] overflow-hidden flex flex-col relative relative">
@@ -653,13 +715,13 @@ function StageCard({ stage, onUpdate, onModify }) {
 
                 {/* Big Ratio Display */}
                 <div className="flex items-baseline gap-1 mb-2 font-bold font-mono">
-                    <span className="text-4xl text-[#4F95FF]">{stage.blue}</span>
+                    <span className="text-4xl text-[#4F95FF]">{normBlue}</span>
                     <span className="text-2xl text-[#625D71]"> : </span>
-                    <span className="text-4xl text-[#FF4A4A]">{stage.red}</span>
+                    <span className="text-4xl text-[#FF4A4A]">{normRed}</span>
                     <span className="text-2xl text-[#625D71]"> : </span>
-                    <span className="text-4xl text-[#FF2A85]">{stage.farRed}</span>
+                    <span className="text-4xl text-[#FF2A85]">{normFarRed}</span>
                     <span className="text-2xl text-[#625D71]"> : </span>
-                    <span className="text-4xl text-[#FFFFFF]">{stage.white}</span>
+                    <span className="text-4xl text-[#FFFFFF]">{normWhite}</span>
                 </div>
                 <p className="text-[9px] text-[#625D71] font-bold tracking-[0.2em] mb-8">SPECTRUM RATIO (B:R:FR:W)</p>
 
@@ -672,6 +734,7 @@ function StageCard({ stage, onUpdate, onModify }) {
                         thumbClass="thumb-blue"
                         onChange={(e) => onUpdate('blue', e.target.value)}
                         disabled={true}
+                        ratioValue={normBlue}
                     />
                     <SliderRow
                         label="RED"
@@ -680,6 +743,7 @@ function StageCard({ stage, onUpdate, onModify }) {
                         thumbClass="thumb-red"
                         onChange={(e) => onUpdate('red', e.target.value)}
                         disabled={true}
+                        ratioValue={normRed}
                     />
                     <SliderRow
                         label="FAR-RED"
@@ -688,6 +752,7 @@ function StageCard({ stage, onUpdate, onModify }) {
                         thumbClass="thumb-pink"
                         onChange={(e) => onUpdate('farRed', e.target.value)}
                         disabled={true}
+                        ratioValue={normFarRed}
                     />
                     <SliderRow
                         label="WHITE"
@@ -696,6 +761,7 @@ function StageCard({ stage, onUpdate, onModify }) {
                         thumbClass="thumb-white"
                         onChange={(e) => onUpdate('white', e.target.value)}
                         disabled={true}
+                        ratioValue={normWhite}
                     />
                 </div>
 
@@ -715,14 +781,38 @@ function StageCard({ stage, onUpdate, onModify }) {
     );
 }
 
-function SliderRow({ label, value, color, onChange, thumbClass, disabled = false }) {
+function SliderRow({ label, value, color, onChange, thumbClass, disabled = false, ratioValue, targetPPFD, maxPPFD }) {
     return (
         <div>
             <div className="flex justify-between items-center mb-3">
-                <span className="text-[10px] font-bold tracking-[0.2em]" style={{ color: color }}>
+                <span className="text-[10px] font-bold tracking-[0.2em] flex items-center gap-2" style={{ color: color }}>
                     {label}
+                    {targetPPFD !== undefined && maxPPFD !== undefined && (
+                        <span className={`px-2 py-0.5 rounded text-[9px] ${targetPPFD > maxPPFD ? 'bg-red-500/20 text-red-500 border border-red-500/50' : 'bg-[#15121C] text-[#625D71] border border-[#2A2732]'}`}>
+                            {targetPPFD > maxPPFD ? '⚠️ ' : ''}{Math.floor(targetPPFD)} / {Math.floor(maxPPFD)} PPFD
+                        </span>
+                    )}
                 </span>
-                <span className="text-sm font-bold font-mono text-white text-right w-10">{value}%</span>
+                <div className="flex items-center gap-1 shrink-0">
+                    <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={value}
+                        onChange={onChange}
+                        disabled={disabled}
+                        className={`text-sm font-bold font-mono text-white text-right bg-transparent w-9 outline-none hide-arrows ${!disabled ? 'border-b border-[#222] focus:border-[#97CBFF] px-1' : 'border-transparent'}`}
+                    />
+                    <span className="text-sm font-bold font-mono text-white text-right mr-1">%</span>
+                    {ratioValue !== undefined && (
+                        <span 
+                            style={{ color: color, borderColor: `${color}40`, backgroundColor: `${color}15` }} 
+                            className="text-[11px] font-bold font-mono px-2 py-0.5 border rounded-md"
+                        >
+                            {ratioValue}
+                        </span>
+                    )}
+                </div>
             </div>
             <input
                 type="range" min="0" max="100"
@@ -743,6 +833,9 @@ function SliderRow({ label, value, color, onChange, thumbClass, disabled = false
 function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddStage, onUpdateStageName, onRemoveStage, onUpdateLogic }) {
     // If the profile has stages, expand the first one, otherwise null
     const [expandedStageId, setExpandedStageId] = useState(profile.stages.length > 0 ? profile.stages[0].id : null);
+    
+    const limitCheck = checkProfilePPFDLimit(profile);
+    const isExceedingTotal = limitCheck !== null;
 
     return (
         <>
@@ -811,7 +904,11 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
                     <button onClick={onDiscard} className="text-[10px] font-bold tracking-widest uppercase text-[#625D71] hover:text-white transition-colors border border-[#222] hover:border-white/20 rounded-full px-6 py-3.5">
                         Discard Changes
                     </button>
-                    <button onClick={onSave} className="bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] px-10 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors shadow-[0_0_20px_rgba(151,203,255,0.3)]">
+                    <button 
+                        onClick={onSave} 
+                        disabled={isExceedingTotal}
+                        className={`px-10 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors ${isExceedingTotal ? 'bg-[#2A2732] text-[#625D71] cursor-not-allowed' : 'bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] shadow-[0_0_20px_rgba(151,203,255,0.3)]'}`}
+                    >
                         Save Recipe
                     </button>
                 </div>
@@ -821,12 +918,38 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
 }
 
 function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLogic }) {
+    const total = stage.blue + stage.red + stage.farRed + stage.white || 0;
+    const normBlue = total > 0 ? Math.round((stage.blue / total) * 100) : 0;
+    const normRed = total > 0 ? Math.round((stage.red / total) * 100) : 0;
+    const normFarRed = total > 0 ? Math.round((stage.farRed / total) * 100) : 0;
+
+    const normWhite = total > 0 ? 100 - normBlue - normRed - normFarRed : 0;
+
+    const reqPPFD = parseInt(stage.lightIntensity) || 0;
+    const targetBluePPFD = (normBlue / 100) * reqPPFD;
+    const targetRedPPFD = (normRed / 100) * reqPPFD;
+    const targetFarRedPPFD = (normFarRed / 100) * reqPPFD;
+    const targetWhitePPFD = (normWhite / 100) * reqPPFD;
+
+    let maxAchievablePPFD = Infinity;
+    if (normBlue > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.blue / (normBlue / 100));
+    if (normRed > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.red / (normRed / 100));
+    if (normFarRed > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.farRed / (normFarRed / 100));
+    if (normWhite > 0) maxAchievablePPFD = Math.min(maxAchievablePPFD, HW_LIMITS.white / (normWhite / 100));
+    if (maxAchievablePPFD === Infinity) maxAchievablePPFD = 0;
+    
+    const isExceedingTotal = reqPPFD > maxAchievablePPFD && maxAchievablePPFD > 0;
+
+    const handleColorChange = (key, val) => {
+        let num = parseInt(val) || 0;
+        if (num > 100) num = 100;
+        if (num < 0) num = 0;
+        onUpdateLogic(key, num);
+    };
+
     // Handle mock values default initializations
     const useLeafCount = stage.useLeafCount !== false;
     const leafCount = stage.leafCount || 8;
-    const useDiameter = stage.useDiameter !== false;
-    const diameter = stage.diameter || 12;
-    const logicOperator = stage.logicOperator || 'AND';
 
     // Timeline logic
     const defaultTimeline = [
@@ -920,7 +1043,12 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                                                 min="0"
                                                 max="100"
                                                 value={seg.intensity}
-                                                onChange={(e) => handleUpdateSegment(seg.id, 'intensity', parseInt(e.target.value) || 0)}
+                                                onChange={(e) => {
+                                                    let val = parseInt(e.target.value) || 0;
+                                                    if (val > 100) val = 100;
+                                                    if (val < 0) val = 0;
+                                                    handleUpdateSegment(seg.id, 'intensity', val);
+                                                }}
                                                 className="bg-transparent text-white font-bold text-center text-sm w-8 outline-none hide-arrows"
                                             />
                                             <span className="text-white font-bold text-sm">%</span>
@@ -981,45 +1109,66 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                             value={stage.blue}
                             color="#4F95FF"
                             thumbClass="thumb-blue"
-                            onChange={(e) => onUpdateLogic('blue', e.target.value)}
+                            onChange={(e) => handleColorChange('blue', e.target.value)}
+                            ratioValue={normBlue}
+                            targetPPFD={targetBluePPFD}
+                            maxPPFD={HW_LIMITS.blue}
                         />
                         <SliderRow
                             label="Deep Red (660nm)"
                             value={stage.red}
                             color="#FF4A4A"
                             thumbClass="thumb-red"
-                            onChange={(e) => onUpdateLogic('red', e.target.value)}
+                            onChange={(e) => handleColorChange('red', e.target.value)}
+                            ratioValue={normRed}
+                            targetPPFD={targetRedPPFD}
+                            maxPPFD={HW_LIMITS.red}
                         />
                         <SliderRow
                             label="Far Red (730nm)"
                             value={stage.farRed}
                             color="#FF2A85"
                             thumbClass="thumb-pink"
-                            onChange={(e) => onUpdateLogic('farRed', e.target.value)}
+                            onChange={(e) => handleColorChange('farRed', e.target.value)}
+                            ratioValue={normFarRed}
+                            targetPPFD={targetFarRedPPFD}
+                            maxPPFD={HW_LIMITS.farRed}
                         />
                         <SliderRow
                             label="Full Spectrum White"
                             value={stage.white}
                             color="#FFFFFF"
                             thumbClass="thumb-white"
-                            onChange={(e) => onUpdateLogic('white', e.target.value)}
+                            onChange={(e) => handleColorChange('white', e.target.value)}
+                            ratioValue={normWhite}
+                            targetPPFD={targetWhitePPFD}
+                            maxPPFD={HW_LIMITS.white}
                         />
                     </div>
 
-                    <div className="flex justify-between items-center mt-12 pr-4 lg:pr-10">
-                        <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] leading-snug">LIGHT INTENSITY<br />(PPFD)</span>
-                        <div className="flex items-center gap-4">
-                            <div className="bg-[#15121C] border border-[#2A2732] rounded-full px-6 py-2 w-28 flex justify-end items-center">
-                                <input
-                                    type="number"
-                                    min="0"
-                                    className="bg-transparent text-[#97CBFF] font-mono font-bold text-lg w-full text-right outline-none placeholder-[#625D71] hide-arrows"
-                                    value={stage.lightIntensity || ''}
-                                    onChange={(e) => onUpdateLogic('lightIntensity', parseInt(e.target.value) || 0)}
-                                />
+                    <div className="flex flex-col mt-12 pr-4 lg:pr-10">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-[#625D71] font-bold tracking-[0.2em] leading-snug">LIGHT INTENSITY<br />(PPFD)</span>
+                            <div className="flex items-center gap-4">
+                                <div className={`bg-[#15121C] border ${isExceedingTotal ? 'border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'border-[#2A2732]'} rounded-full px-6 py-2 w-28 flex justify-end items-center transition-colors`}>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className={`bg-transparent ${isExceedingTotal ? 'text-red-500' : 'text-[#97CBFF]'} font-mono font-bold text-lg w-full text-right outline-none placeholder-[#625D71] hide-arrows`}
+                                        value={stage.lightIntensity || ''}
+                                        onChange={(e) => onUpdateLogic('lightIntensity', parseInt(e.target.value) || 0)}
+                                    />
+                                </div>
+                                <span className="text-[#625D71] text-[8px] font-bold tracking-[0.1em] leading-none uppercase">µmol/<br />m²/s<br /><span className="text-[#4F95FF] tracking-[0.2em] mt-1 inline-block">TARGET</span></span>
                             </div>
-                            <span className="text-[#625D71] text-[8px] font-bold tracking-[0.1em] leading-none uppercase">µmol/<br />m²/s<br /><span className="text-[#4F95FF] tracking-[0.2em] mt-1 inline-block">TARGET</span></span>
                         </div>
+                        {isExceedingTotal && (
+                            <div className="text-right mt-2">
+                                <span className="text-[9px] text-red-500 font-bold bg-red-500/10 border border-red-500/30 px-2 py-1 rounded">
+                                    ⚠️ Maximum achievable at this ratio is {Math.floor(maxAchievablePPFD)} PPFD
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1045,23 +1194,6 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         />
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div
-                            onClick={() => onUpdateLogic('useDiameter', !useDiameter)}
-                            className={`w-5 h-5 rounded overflow-hidden flex items-center justify-center cursor-pointer border transition-colors ${useDiameter ? 'bg-[#97CBFF] border-[#97CBFF]' : 'bg-transparent border-[#625D71]'}`}
-                        >
-                            {useDiameter && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15121B" strokeWidth="4"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                        </div>
-                        <span className="text-white font-bold text-xs tracking-wide">Diameter</span>
-                        <input
-                            type="number"
-                            value={diameter}
-                            onChange={(e) => onUpdateLogic('diameter', e.target.value)}
-                            disabled={!useDiameter}
-                            className={`bg-[#15121C] border border-[#2A2732] rounded-lg px-2 py-2 w-16 text-center font-bold text-xs focus:border-[#97CBFF] outline-none transition-colors ${useDiameter ? 'text-[#97CBFF]' : 'text-[#625D71] opacity-50'}`}
-                        />
-                        <span className={`font-bold text-[10px] tracking-widest transition-opacity ${useDiameter ? 'text-[#625D71]' : 'text-[#625D71] opacity-40'}`}>CM</span>
-                    </div>
 
                 </div>
             </div>
