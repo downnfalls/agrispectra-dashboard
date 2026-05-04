@@ -140,11 +140,12 @@ function Energy() {
         return () => clearInterval(interval);
     }, []);
 
-    // Calculate remaining seconds based on real time
+    // Calculate remaining seconds to the next 5-minute clock boundary (e.g. 20:00, 20:05)
     const nextRecordIn = useMemo(() => {
-        const lastTs = parseInt(localStorage.getItem('agrispectra_last_record_timestamp')) || 0;
-        const elapsed = Math.floor((now - lastTs) / 1000);
-        const remaining = 300 - elapsed; // 5 minutes = 300 seconds
+        const currentMs = now;
+        const windowSize = 300000; // 5 minutes in ms
+        const nextBoundary = Math.ceil((currentMs + 1000) / windowSize) * windowSize;
+        const remaining = Math.floor((nextBoundary - currentMs) / 1000);
         return remaining > 0 ? remaining : 0;
     }, [now]);
 
@@ -155,14 +156,9 @@ function Energy() {
         if (isRecordingRef.current) return;
 
         const watts = liveWattsRef.current;
-        // Proceed even if watts is 0 so the timer resets and UI stays alive.
-        
         isRecordingRef.current = true;
         
-        // Optimistically update timestamp to restart countdown immediately
         const nowMs = Date.now();
-        localStorage.setItem('agrispectra_last_record_timestamp', nowMs.toString());
-        
         const timeStr = new Date(nowMs).toLocaleTimeString('th-TH');
         localStorage.setItem('agrispectra_last_record_time', timeStr);
         setLastRecordTime(timeStr);
@@ -197,12 +193,16 @@ function Energy() {
         }
     }, [fetchDailyData, fetchMonthlyTotal]);
 
-    // Trigger recording when countdown hits 0
+    // Trigger recording when crossing a 5-minute boundary
+    const lastWindowRef = useRef(Math.floor(Date.now() / 300000));
+
     useEffect(() => {
-        if (nextRecordIn === 0) {
+        const currentWindow = Math.floor(now / 300000);
+        if (currentWindow > lastWindowRef.current) {
+            lastWindowRef.current = currentWindow;
             doRecordEnergy();
         }
-    }, [nextRecordIn, doRecordEnergy]);
+    }, [now, doRecordEnergy]);
 
     // --- WebSocket for live power data (no dependency on recording) ---
     useEffect(() => {
