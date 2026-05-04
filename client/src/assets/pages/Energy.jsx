@@ -1,26 +1,52 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import UserProfile from '../components/UserProfile';
 import { API_BASE_URL } from '../../config';
 
 // --- Hardware LED Power Constants (from datasheet) ---
 const HW_POWER = {
-    white:   { vf: 2.75,  mA: 65,  count: 180 },  
-    deepRed: { vf: 2.0,   mA: 700, count: 54 },   
-    farRed:  { vf: 2.0,   mA: 350, count: 18 },   
-    blue:    { vf: 2.975, mA: 350, count: 36 },   
+    white: { vf: 2.75, mA: 65, count: 180 },
+    deepRed: { vf: 2.0, mA: 700, count: 54 },
+    farRed: { vf: 2.0, mA: 350, count: 18 },
+    blue: { vf: 2.975, mA: 350, count: 36 },
 };
 const MAX_WATTS_PER_CHANNEL = {
-    white:   (HW_POWER.white.vf   * HW_POWER.white.mA   / 1000) * HW_POWER.white.count,
+    white: (HW_POWER.white.vf * HW_POWER.white.mA / 1000) * HW_POWER.white.count,
     deepRed: (HW_POWER.deepRed.vf * HW_POWER.deepRed.mA / 1000) * HW_POWER.deepRed.count,
-    farRed:  (HW_POWER.farRed.vf  * HW_POWER.farRed.mA  / 1000) * HW_POWER.farRed.count,
-    blue:    (HW_POWER.blue.vf    * HW_POWER.blue.mA    / 1000) * HW_POWER.blue.count,
+    farRed: (HW_POWER.farRed.vf * HW_POWER.farRed.mA / 1000) * HW_POWER.farRed.count,
+    blue: (HW_POWER.blue.vf * HW_POWER.blue.mA / 1000) * HW_POWER.blue.count,
 };
 
 const TOTAL_MAX_WATTS = MAX_WATTS_PER_CHANNEL.white + MAX_WATTS_PER_CHANNEL.deepRed + MAX_WATTS_PER_CHANNEL.farRed + MAX_WATTS_PER_CHANNEL.blue;
 
+// Helper: get today's date string YYYY-MM-DD
+const getTodayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 function Energy() {
     const [isLoading, setIsLoading] = useState(true);
     const [hardwareStatus, setHardwareStatus] = useState('OFFLINE');
+    const dateInputRef = useRef(null);
+    const lastRecordTimeRef = useRef(0); // throttle recording
+
+    // --- Date Navigation ---
+    const [selectedDate, setSelectedDate] = useState(getTodayStr);
+
+    const handlePrevDay = () => {
+        const d = new Date(selectedDate + 'T00:00:00');
+        d.setDate(d.getDate() - 1);
+        setSelectedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    };
+    const handleNextDay = () => {
+        const d = new Date(selectedDate + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        setSelectedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    };
+
+    const isToday = selectedDate === getTodayStr();
+
+    // --- Live data from WebSocket ---
     const [liveData, setLiveData] = useState({
         currentWatts: 0,
         isLive: false,
@@ -29,9 +55,13 @@ function Energy() {
     });
 
     const [recipeInfo, setRecipeInfo] = useState({
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase(),
         recipeName: "Default Lettuce"
     });
+
+    // --- DB-sourced data ---
+    const [dbHourlyData, setDbHourlyData] = useState(null); // array of 24 { hour, kwh }
+    const [dbDailyTotal, setDbDailyTotal] = useState(0);
+    const [dbMonthlyTotal, setDbMonthlyTotal] = useState(0);
 
     // --- Helper Logic (Same as Dashboard) ---
     const calculateActivePeriod = (timeline) => {
@@ -52,8 +82,104 @@ function Energy() {
         return active;
     };
 
+    // --- Fetch daily data from DB ---
+    const fetchDailyData = useCallback(async (date) => {
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_BASE_URL}/api/energy/daily?date=${date}&_t=${Date.now()}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDbHourlyData(data.hours);
+                setDbDailyTotal(data.dailyTotal);
+            }
+        } catch (e) {
+            console.warn('Failed to fetch daily energy:', e);
+        }
+    }, []);
+
+    // --- Fetch monthly total from DB ---
+    const fetchMonthlyTotal = useCallback(async (date) => {
+        const month = date.substring(0, 7); // "2026-05"
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_BASE_URL}/api/energy/monthly?month=${month}&_t=${Date.now()}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setDbMonthlyTotal(data.monthlyTotal);
+            }
+        } catch (e) {
+            console.warn('Failed to fetch monthly energy:', e);
+        }
+    }, []);
+
+    // --- Fetch data when date changes ---
+    useEffect(() => {
+        fetchDailyData(selectedDate);
+        fetchMonthlyTotal(selectedDate);
+    }, [selectedDate, fetchDailyData, fetchMonthlyTotal]);
+
+    // --- Use a ref to always hold the latest watts for recording ---
+    const liveWattsRef = useRef(0);
+    const selectedDateRef = useRef(selectedDate);
+    selectedDateRef.current = selectedDate;
+
+    // --- Record energy to DB (called by setInterval every 5 min) ---
+    const doRecordEnergy = useCallback(async () => {
+        const watts = liveWattsRef.current;
+        if (watts <= 0) return;
+
+        const today = getTodayStr();
+        const hour = new Date().getHours();
+        // kWh for a 5-minute interval: watts × (5/60) hours / 1000
+        const kwh = (watts * (5 / 60)) / 1000;
+
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_BASE_URL}/api/energy/record`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ date: today, hour, kwh: parseFloat(kwh.toFixed(6)) })
+            });
+            if (res.ok) {
+                console.log(`⚡ Recorded ${kwh.toFixed(6)} kWh for ${today} hour ${hour} (${watts}W)`);
+                // Refresh display if viewing today
+                if (selectedDateRef.current === today) {
+                    fetchDailyData(today);
+                    fetchMonthlyTotal(today);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to record energy:', e);
+        }
+    }, [fetchDailyData, fetchMonthlyTotal]);
+
+    // --- setInterval: record every 5 minutes reliably ---
+    useEffect(() => {
+        // Record immediately on first load (if watts > 0)
+        const initialTimer = setTimeout(() => doRecordEnergy(), 3000);
+
+        // Then every 5 minutes
+        const interval = setInterval(() => {
+            doRecordEnergy();
+        }, 300000); // 5 min = 300,000 ms
+
+        return () => {
+            clearTimeout(initialTimer);
+            clearInterval(interval);
+        };
+    }, [doRecordEnergy]);
+
+    // --- WebSocket for live power data (no dependency on recording) ---
     useEffect(() => {
         let socket = null;
+        let isMounted = true;
         const connectWS = () => {
             const wsUrl = API_BASE_URL.replace('http', 'ws') + '/hardware/ws';
             socket = new WebSocket(wsUrl);
@@ -85,7 +211,7 @@ function Energy() {
                         const sMatch = currentProfile.stages.find(s => s.name && s.name.split('\n')[0] === esp32Payload.stage) || currentProfile.stages[0];
                         if (sMatch) {
                             const total = (sMatch.blue || 0) + (sMatch.red || 0) + (sMatch.farRed || 0) + (sMatch.white || 0) || 1;
-                            stageRatios = { blue: (sMatch.blue || 0)/total*100, red: (sMatch.red || 0)/total*100, farRed: (sMatch.farRed || 0)/total*100, white: (sMatch.white || 0)/total*100 };
+                            stageRatios = { blue: (sMatch.blue || 0) / total * 100, red: (sMatch.red || 0) / total * 100, farRed: (sMatch.farRed || 0) / total * 100, white: (sMatch.white || 0) / total * 100 };
                             const period = calculateActivePeriod(sMatch.timeline);
                             activeIntensity = period ? period.intensity : 0;
                         }
@@ -102,37 +228,47 @@ function Energy() {
 
                     if (pwmBlue !== undefined && pwmBlue !== null) {
                         calculatedWatts = Math.round(
-                            (MAX_WATTS_PER_CHANNEL.blue    * (pwmBlue / 100)) +
-                            (MAX_WATTS_PER_CHANNEL.deepRed  * ((pwmRed || 0) / 100)) +
-                            (MAX_WATTS_PER_CHANNEL.farRed   * ((pwmFarRed || 0) / 100)) +
-                            (MAX_WATTS_PER_CHANNEL.white    * ((pwmWhite || 0) / 100))
+                            (MAX_WATTS_PER_CHANNEL.blue * (pwmBlue / 100)) +
+                            (MAX_WATTS_PER_CHANNEL.deepRed * ((pwmRed || 0) / 100)) +
+                            (MAX_WATTS_PER_CHANNEL.farRed * ((pwmFarRed || 0) / 100)) +
+                            (MAX_WATTS_PER_CHANNEL.white * ((pwmWhite || 0) / 100))
                         );
                         live = true;
                     } else {
                         calculatedWatts = Math.round(
-                            (MAX_WATTS_PER_CHANNEL.blue    * (stageRatios.blue   / 100) +
-                             MAX_WATTS_PER_CHANNEL.deepRed  * (stageRatios.red    / 100) +
-                             MAX_WATTS_PER_CHANNEL.farRed   * (stageRatios.farRed / 100) +
-                             MAX_WATTS_PER_CHANNEL.white    * (stageRatios.white  / 100))
+                            (MAX_WATTS_PER_CHANNEL.blue * (stageRatios.blue / 100) +
+                                MAX_WATTS_PER_CHANNEL.deepRed * (stageRatios.red / 100) +
+                                MAX_WATTS_PER_CHANNEL.farRed * (stageRatios.farRed / 100) +
+                                MAX_WATTS_PER_CHANNEL.white * (stageRatios.white / 100))
                             * (activeIntensity / 100)
                         );
                     }
 
+                    const finalWatts = Number.isNaN(calculatedWatts) ? 0 : calculatedWatts;
+
+                    // Update ref for recording
+                    liveWattsRef.current = finalWatts;
+
                     setLiveData({
-                        currentWatts: Number.isNaN(calculatedWatts) ? 0 : calculatedWatts,
+                        currentWatts: finalWatts,
                         isLive: live,
                         intensity: activeIntensity,
                         ratios: stageRatios
                     });
                     setIsLoading(false);
-                } catch (e) {}
+                } catch (e) { }
             };
-            socket.onclose = () => setTimeout(connectWS, 3000);
+            socket.onclose = () => {
+                if (isMounted) setTimeout(connectWS, 3000);
+            };
             socket.onerror = () => socket.close();
         };
         connectWS();
-        return () => { if (socket) socket.close(); };
-    }, []);
+        return () => {
+            isMounted = false;
+            if (socket) socket.close();
+        };
+    }, []); // No dependencies — WebSocket connects once
 
     // Initial load fallback
     useEffect(() => {
@@ -140,18 +276,31 @@ function Energy() {
         return () => clearTimeout(timer);
     }, []);
 
-    // --- Mock History Data (Enhanced with live context) ---
-    const dailyTotalKwh = useMemo(() => {
-        const hoursPassed = new Date().getHours() + new Date().getMinutes() / 60;
-        return (liveData.currentWatts * hoursPassed / 1000).toFixed(2);
-    }, [liveData.currentWatts]);
+    // --- Compute display data ---
+    // Always use DB-recorded values. Past hours keep their recorded values.
+    // Current hour shows DB accumulated value (updated every 5 min).
+    const hourlyKwh = useMemo(() => {
+        if (dbHourlyData) {
+            // Use DB data as-is for all hours (past hours won't change)
+            return dbHourlyData.map((entry, i) => ({ hour: i, kwh: entry.kwh }));
+        }
+        // Fallback when no DB data yet: empty chart
+        return Array.from({ length: 24 }, (_, i) => ({ hour: i, kwh: 0 }));
+    }, [dbHourlyData]);
 
-    const hourlyConsumption = useMemo(() => {
-        return Array.from({ length: 24 }, (_, i) => ({
-            hour: i,
-            val: i <= new Date().getHours() ? (liveData.currentWatts / TOTAL_MAX_WATTS * 100) : 0
-        }));
-    }, [liveData.currentWatts]);
+    const dailyTotalKwh = useMemo(() => {
+        if (dbDailyTotal > 0) return dbDailyTotal.toFixed(2);
+        return hourlyKwh.reduce((sum, h) => sum + h.kwh, 0).toFixed(2);
+    }, [dbDailyTotal, hourlyKwh]);
+
+    const maxHourlyKwh = useMemo(() => {
+        const max = Math.max(...hourlyKwh.map(h => h.kwh));
+        return max > 0 ? max : 1;
+    }, [hourlyKwh]);
+
+    const monthlyTotalKwh = useMemo(() => {
+        return dbMonthlyTotal > 0 ? dbMonthlyTotal.toFixed(1) : '0.0';
+    }, [dbMonthlyTotal]);
 
     if (isLoading) {
         return (
@@ -164,7 +313,7 @@ function Energy() {
 
     return (
         <div className="bg-[#0A0A0A] min-h-screen flex flex-col p-8 lg:p-12 gap-8 text-white font-sans">
-            
+
             {/* Header */}
             <header className="flex justify-between items-center">
                 <div className="flex flex-col">
@@ -183,59 +332,104 @@ function Energy() {
             {/* Date Navigation */}
             <div className="flex items-center gap-3">
                 <div className="bg-[#151515] border border-[#222] rounded-xl flex items-center h-12 px-2">
-                    <button className="p-2 text-[#625D71] hover:text-white transition">
+                    <button onClick={handlePrevDay} className="p-2 text-[#625D71] hover:text-white transition">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
                     </button>
-                    <div className="flex items-center gap-3 px-4">
+                    <button
+                        onClick={() => dateInputRef.current?.showPicker()}
+                        className="flex items-center gap-3 px-4 cursor-pointer hover:bg-[#222] rounded-lg transition py-1"
+                    >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        <span className="text-white font-bold text-[11px] tracking-[0.1em] uppercase">{recipeInfo.date}</span>
-                    </div>
-                    <button className="p-2 text-[#625D71] hover:text-white transition">
+                        <span className="text-white font-bold text-[11px] tracking-[0.1em] uppercase">
+                            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase()}
+                        </span>
+                    </button>
+                    <input
+                        ref={dateInputRef}
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => { if (e.target.value) setSelectedDate(e.target.value); }}
+                        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+                    />
+                    <button onClick={handleNextDay} className="p-2 text-[#625D71] hover:text-white transition">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
                     </button>
                 </div>
-                <button className="bg-[#151515] border border-[#222] rounded-xl h-12 px-6 flex items-center gap-3 hover:bg-[#222] transition">
-                    <span className="text-white font-bold text-[11px] tracking-[0.1em] uppercase">Snapshot: Today</span>
-                </button>
+                {!isToday && (
+                    <button
+                        onClick={() => setSelectedDate(getTodayStr())}
+                        className="bg-[#3B82F6]/10 border border-[#3B82F6]/30 rounded-xl h-12 px-6 flex items-center gap-2 hover:bg-[#3B82F6]/20 transition"
+                    >
+                        <span className="text-[#3B82F6] font-bold text-[11px] tracking-[0.1em] uppercase">← Back to Today</span>
+                    </button>
+                )}
+                {isToday && (
+                    <div className="flex items-center gap-2 h-12 px-4">
+                        <div className="w-2 h-2 rounded-full bg-[#34D399] animate-pulse"></div>
+                        <span className="text-[#34D399] font-bold text-[10px] tracking-widest uppercase">Live Recording</span>
+                    </div>
+                )}
             </div>
 
             {/* Main Content */}
             <div className="grid grid-cols-12 gap-8">
-                
+
                 {/* Power Consumption Chart */}
                 <div className="col-span-12 xl:col-span-9 bg-[#111] border border-[#222] rounded-3xl p-10 flex flex-col h-[520px]">
                     <div className="flex justify-between items-start mb-10">
                         <div>
-                            <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-2">Usage Patterns (24H)</h3>
+                            <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-2">Hourly Consumption (kWh per Hour)</h3>
                             <div className="flex items-baseline gap-2">
-                                <span className="text-white text-5xl font-bold tracking-tight">{liveData.currentWatts}</span>
-                                <span className="font-bold text-[11px] tracking-widest uppercase text-[#3B82F6]">Watts Current</span>
+                                {isToday ? (
+                                    <>
+                                        <span className="text-white text-5xl font-bold tracking-tight">{liveData.currentWatts}</span>
+                                        <span className="font-bold text-[11px] tracking-widest uppercase text-[#3B82F6]">Watts Current</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-white text-5xl font-bold tracking-tight">{dailyTotalKwh}</span>
+                                        <span className="font-bold text-[11px] tracking-widest uppercase text-[#3B82F6]">kWh Total</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-3 bg-[#1A1A1A] rounded-full px-5 py-2 border border-[#333]">
-                            <div className={`w-2 h-2 rounded-full ${liveData.isLive ? 'bg-[#3B82F6] animate-pulse' : 'bg-orange-400'}`}></div>
-                            <span className="text-[#E0E0E0] font-bold text-[9px] tracking-widest uppercase">{liveData.isLive ? 'Real-time PWM Mode' : 'Estimated Mode'}</span>
+                            <div className={`w-2 h-2 rounded-full ${isToday && liveData.isLive ? 'bg-[#3B82F6] animate-pulse' : isToday ? 'bg-orange-400' : 'bg-[#625D71]'}`}></div>
+                            <span className="text-[#E0E0E0] font-bold text-[9px] tracking-widest uppercase">
+                                {isToday ? (liveData.isLive ? 'Real-time PWM Mode' : 'Estimated Mode') : 'Historical Data'}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="flex-1 flex flex-col justify-end">
-                        <div className="flex items-end justify-between gap-[4px] h-64 border-b border-[#222]/50 pb-2">
-                            {hourlyConsumption.map((d, i) => (
-                                <div 
-                                    key={i} 
-                                    style={{ height: `${d.val || 1}%` }} 
-                                    className={`flex-1 rounded-t-[4px] transition-all duration-500 hover:opacity-80 ${i <= new Date().getHours() ? 'bg-gradient-to-t from-[#1E40AF] to-[#3B82F6]' : 'bg-[#1A1A1A]'}`}
-                                ></div>
-                            ))}
+                    <div className="flex-1 flex flex-col justify-end overflow-x-auto">
+                        <div className="flex items-end gap-[2px] sm:gap-[3px] lg:gap-[4px] h-64 border-b border-[#222]/50 pb-1 min-w-0">
+                            {hourlyKwh.map((d, i) => {
+                                const barPct = maxHourlyKwh > 0 ? (d.kwh / maxHourlyKwh) * 100 : 0;
+                                return (
+                                    <div
+                                        key={i}
+                                        className="flex-1 flex flex-col items-center justify-end h-full group relative min-w-0"
+                                    >
+                                        {/* Tooltip on hover */}
+                                        <div className="absolute -top-8 bg-[#222] text-white text-[8px] sm:text-[9px] font-mono px-1.5 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                                            {d.kwh.toFixed(4)} kWh
+                                        </div>
+                                        {/* Bar */}
+                                        <div
+                                            style={{ height: `${barPct || 1}%` }}
+                                            className={`w-full rounded-t-[3px] transition-all duration-500 group-hover:opacity-80 ${d.kwh > 0 ? 'bg-gradient-to-t from-[#1E40AF] to-[#3B82F6]' : 'bg-[#1A1A1A]'}`}
+                                        ></div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                        <div className="flex justify-between text-[#625D71] font-bold text-[10px] tracking-widest uppercase mt-6 px-1">
-                            <span>00:00</span>
-                            <span>04:00</span>
-                            <span>08:00</span>
-                            <span>12:00</span>
-                            <span>16:00</span>
-                            <span>20:00</span>
-                            <span>23:59</span>
+                        {/* Hour labels — one per bar */}
+                        <div className="flex gap-[2px] sm:gap-[3px] lg:gap-[4px] mt-2">
+                            {hourlyKwh.map((_, i) => (
+                                <div key={i} className="flex-1 text-center text-[#625D71] font-bold text-[7px] sm:text-[8px] md:text-[9px] lg:text-[10px] font-mono leading-tight min-w-0 truncate">
+                                    {String(i).padStart(2, '0')}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -249,9 +443,9 @@ function Energy() {
                             </div>
                         </div>
                         <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-6">Current Draw</h3>
-                        <span className="text-white text-6xl font-bold tracking-tighter mb-2">{liveData.currentWatts}W</span>
-                        <p className={`text-[11px] font-bold tracking-wide ${liveData.currentWatts > 0 ? 'text-[#34D399]' : 'text-[#625D71]'}`}>
-                            ● {liveData.currentWatts > 0 ? 'Active Load' : 'Standby Mode'}
+                        <span className="text-white text-6xl font-bold tracking-tighter mb-2">{isToday ? `${liveData.currentWatts}W` : '--'}</span>
+                        <p className={`text-[11px] font-bold tracking-wide ${isToday && liveData.currentWatts > 0 ? 'text-[#34D399]' : 'text-[#625D71]'}`}>
+                            ● {isToday ? (liveData.currentWatts > 0 ? 'Active Load' : 'Standby Mode') : 'Viewing History'}
                         </p>
                     </div>
 
@@ -277,13 +471,13 @@ function Energy() {
                 </div>
 
                 <div className="col-span-12 md:col-span-4 bg-[#111] border border-[#222] rounded-3xl p-8">
-                    <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-6">Forecasted Monthly</h3>
+                    <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-6">Monthly Total</h3>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-white text-4xl font-bold tracking-tight">{(dailyTotalKwh * 30).toFixed(1)}</span>
+                        <span className="text-white text-4xl font-bold tracking-tight">{monthlyTotalKwh}</span>
                         <span className="text-[#625D71] font-bold text-sm uppercase">kWh</span>
                     </div>
                     <div className="w-full h-1 bg-[#222] rounded-full mt-6 overflow-hidden">
-                        <div className="h-full bg-[#34D399] rounded-full" style={{ width: '45%' }}></div>
+                        <div className="h-full bg-[#34D399] rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (parseFloat(monthlyTotalKwh) / (parseFloat(dailyTotalKwh) * 30 || 1)) * 100)}%` }}></div>
                     </div>
                 </div>
 

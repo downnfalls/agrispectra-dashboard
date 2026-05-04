@@ -386,6 +386,7 @@ function Dashboard() {
             isComponentMounted = false;
             if (socket) {
                 console.log("Cleaning up WebSocket...");
+                // Note: Calling close() while CONNECTING causes a harmless browser warning in React StrictMode.
                 socket.close();
             }
         };

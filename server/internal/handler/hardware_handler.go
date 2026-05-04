@@ -118,6 +118,21 @@ func (h *HardwareHandler) ConnectWebSocket(c *gin.Context) {
 	if state != nil {
 		ws.WriteJSON(state)
 	}
+
+	// Add read loop to keep the connection alive and handle client disconnect
+	go func() {
+		defer func() {
+			esp32StateLock.Lock()
+			delete(clients, ws)
+			esp32StateLock.Unlock()
+			ws.Close()
+		}()
+		for {
+			if _, _, err := ws.NextReader(); err != nil {
+				break
+			}
+		}
+	}()
 }
 
 func (h *HardwareHandler) broadcastConnectionStatus() {

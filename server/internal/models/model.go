@@ -26,6 +26,13 @@ type PowerConsumption struct {
 	Power     float64   `json:"power"`
 }
 
+type EnergyRecord struct {
+	ID   uint    `gorm:"primaryKey" json:"id"`
+	Date string  `gorm:"uniqueIndex:idx_date_hour;not null" json:"date"` // "2026-05-04"
+	Hour int     `gorm:"uniqueIndex:idx_date_hour" json:"hour"`          // 0-23
+	Kwh  float64 `json:"kwh"`                                            // kWh consumed in that hour
+}
+
 type User struct {
 	Username string `json:"username" gorm:"primaryKey"`
 	Password string `json:"password"`

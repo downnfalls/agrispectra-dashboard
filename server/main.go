@@ -32,6 +32,7 @@ func main() {
 		&models.Log{},
 		&models.LightProfile{},
 		&models.PowerConsumption{},
+		&models.EnergyRecord{},
 	)
 	if err != nil {
 		return
@@ -41,12 +42,19 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	logRepo := repository.NewLogRepo(db)
 	lightProfileRepo := repository.NewLightProfileRepo(db) // เพิ่มบรรทัดนี้
+	energyRepo := repository.NewEnergyRepo(db)
+
+	// Seed mock energy data (May 1-3 + April 2026)
+	if err := energyRepo.SeedMockData(); err != nil {
+		log.Printf("Warning: Failed to seed energy data: %v", err)
+	}
 
 	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
 	hardwareHandler := handler.NewHardwareHandler()
 	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler)
+	energyHandler := handler.NewEnergyHandler(energyRepo)
 
 	// เริ่มต้นระบบ Broadcast
 	go hardwareHandler.HandleMessages()
@@ -76,6 +84,11 @@ func main() {
 		apiGroup.GET("/hardware/state", hardwareHandler.GetState)
 		apiGroup.POST("/hardware/stop", hardwareHandler.EmergencyStop) // ปุ่ม Emergency Stop
 		apiGroup.POST("/hardware/force-rescan", hardwareHandler.ForceRescan) // ปุ่ม Force Re-Scan
+
+		// Energy endpoints
+		apiGroup.POST("/energy/record", energyHandler.RecordHourly)
+		apiGroup.GET("/energy/daily", energyHandler.GetDaily)
+		apiGroup.GET("/energy/monthly", energyHandler.GetMonthly)
 	}
 
 	hardwareGroup := r.Group("/hardware")
