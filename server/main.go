@@ -83,7 +83,10 @@ func main() {
 		hardwareGroup.POST("/state", hardwareHandler.UpdateState)
 		hardwareGroup.GET("/ws", hardwareHandler.ConnectWebSocket)
 		hardwareGroup.GET("/command", hardwareHandler.ConnectCommandWS) // สำหรับ ESP32 Connect มาฟังคำสั่ง
+		hardwareGroup.POST("/upload-image", hardwareHandler.UploadImage)
 	}
+
+	r.Static("/uploads", "./uploads")
 
 	fmt.Println("🚀 Pfal Server is running on http://localhost:8080")
 

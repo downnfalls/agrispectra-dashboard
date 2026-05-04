@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -26,17 +28,20 @@ var (
 type ColorData struct {
 	Value float64 `json:"value"`
 	Diff  float64 `json:"diff"`
+	Pwm   float64 `json:"pwm"`
 }
 
 type HardwareState struct {
-	Stage       string    `json:"stage"`
-	LeafCount   int       `json:"leaf_count"`
-	LeafDensity int       `json:"leaf_density"`
-	Total       float64   `json:"total"`
-	White       ColorData `json:"white"`
-	Blue        ColorData `json:"blue"`
-	Red         ColorData `json:"red"`
-	FarRed      ColorData `json:"farRed"`
+	Stage           string    `json:"stage"`
+	LeafCount       int       `json:"leaf_count"`
+	LeafDensity     int       `json:"leaf_density"`
+	Total           float64   `json:"total"`
+	White           ColorData `json:"white"`
+	Blue            ColorData `json:"blue"`
+	Red             ColorData `json:"red"`
+	FarRed          ColorData `json:"farRed"`
+	LastImageUrl    string    `json:"last_image_url,omitempty"`
+	LastCaptureTime string    `json:"last_capture_time,omitempty"`
 }
 
 type HardwareHandler struct{}
@@ -54,6 +59,10 @@ func (h *HardwareHandler) UpdateState(c *gin.Context) {
 	}
 
 	esp32StateLock.Lock()
+	if currentESP32State != nil {
+		state.LastImageUrl = currentESP32State.LastImageUrl
+		state.LastCaptureTime = currentESP32State.LastCaptureTime
+	}
 	currentESP32State = &state
 	esp32StateLock.Unlock()
 
@@ -252,4 +261,64 @@ func (h *HardwareHandler) ForceRescan(c *gin.Context) {
 	h.SendCommand(command)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Force Re-Scan command sent to hardware"})
+}
+
+// อัปโหลดรูปภาพจาก ESP32
+func (h *HardwareHandler) UploadImage(c *gin.Context) {
+	// รับไฟล์จาก form data ชื่อ "image"
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No image file provided"})
+		return
+	}
+
+	// สร้างโฟลเดอร์ uploads/images ถ้ายังไม่มี
+	uploadDir := "uploads/images"
+	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload directory"})
+		return
+	}
+
+	// สร้างชื่อไฟล์ใหม่ เช่น scan_1680000000.jpg
+	ext := filepath.Ext(file.Filename)
+	if ext == "" {
+		ext = ".jpg" // default extension
+	}
+	filename := fmt.Sprintf("scan_%d%s", time.Now().Unix(), ext)
+	savePath := filepath.Join(uploadDir, filename)
+
+	// บันทึกไฟล์
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save image"})
+		return
+	}
+
+	// URL สำหรับเข้าถึงรูปภาพ
+	imageUrl := fmt.Sprintf("/uploads/images/%s", filename)
+	captureTime := time.Now().Format("Jan 02, 2006 - 15:04:05")
+
+	esp32StateLock.Lock()
+	if currentESP32State == nil {
+		currentESP32State = &HardwareState{}
+	}
+	currentESP32State.LastImageUrl = imageUrl
+	currentESP32State.LastCaptureTime = captureTime
+	esp32StateLock.Unlock()
+
+	// แจ้งเตือนไปยัง Web Socket แดชบอร์ดว่ามีรูปภาพใหม่ (เผื่อต้องการให้แดชบอร์ดอัปเดตอัตโนมัติ)
+	msg := gin.H{
+		"type": "new_image",
+		"url":  imageUrl,
+	}
+
+	esp32StateLock.Lock()
+	for client := range clients {
+		client.WriteJSON(msg)
+	}
+	esp32StateLock.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Image uploaded successfully",
+		"url":     imageUrl,
+	})
 }

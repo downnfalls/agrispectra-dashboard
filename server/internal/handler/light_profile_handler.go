@@ -133,11 +133,36 @@ func (h *LightProfileHandler) DeployProfile(c *gin.Context) {
 	// 1. ดึงชื่อ Profile
 	profileName, _ := payload["profile_name"].(string)
 
-	// เพิ่ม action parameter เพื่อให้ ESP32 รู้ว่าเป็นคำสั่งอะไร
-	payload["action"] = "DEPLOY_PROFILE"
+	// สร้างโครงสร้างใหม่ที่มี stages
+	stages := make(map[string]interface{})
+	structuredPayload := make(map[string]interface{})
 
-	// 2. ส่งข้อมูลทั้ง Payload (สูตรไฟ) ไปยัง ESP32 ผ่าน WebSocket ของจริง
-	h.hardwareHandler.SendCommand(payload)
+	for key, value := range payload {
+		if key == "profile_name" || key == "profile_id" {
+			structuredPayload[key] = value
+		} else {
+			// ตรวจสอบว่า value เป็น object และมี key "name" หรือไม่
+			if stageMap, ok := value.(map[string]interface{}); ok {
+				if name, nameOk := stageMap["name"].(string); nameOk && name != "" {
+					stages[name] = value
+				} else {
+					stages[key] = value
+				}
+			} else {
+				stages[key] = value
+			}
+		}
+	}
+	structuredPayload["stages"] = stages
+
+	// หุ้ม Payload ไว้ใน key 'payload' และเพิ่ม action
+	command := map[string]interface{}{
+		"action":  "DEPLOY_PROFILE",
+		"payload": structuredPayload,
+	}
+
+	// 2. ส่งข้อมูลไปยัง ESP32 ผ่าน WebSocket ของจริง
+	h.hardwareHandler.SendCommand(command)
 	
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Profile " + profileName + " deployed to hardware successfully",
