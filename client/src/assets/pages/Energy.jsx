@@ -127,10 +127,45 @@ function Energy() {
     const selectedDateRef = useRef(selectedDate);
     selectedDateRef.current = selectedDate;
 
-    // --- Record energy to DB (called by setInterval every 5 min) ---
+    // --- State for UX indicators (Persisted) ---
+    const [lastRecordTime, setLastRecordTime] = useState(() => {
+        return localStorage.getItem('agrispectra_last_record_time') || null;
+    });
+
+    const [now, setNow] = useState(Date.now());
+
+    // Update 'now' every second to drive the countdown
+    useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Calculate remaining seconds based on real time
+    const nextRecordIn = useMemo(() => {
+        const lastTs = parseInt(localStorage.getItem('agrispectra_last_record_timestamp')) || 0;
+        const elapsed = Math.floor((now - lastTs) / 1000);
+        const remaining = 300 - elapsed; // 5 minutes = 300 seconds
+        return remaining > 0 ? remaining : 0;
+    }, [now]);
+
+    // --- Record energy to DB ---
+    const isRecordingRef = useRef(false);
+
     const doRecordEnergy = useCallback(async () => {
+        if (isRecordingRef.current) return;
+
         const watts = liveWattsRef.current;
-        if (watts <= 0) return;
+        // Proceed even if watts is 0 so the timer resets and UI stays alive.
+        
+        isRecordingRef.current = true;
+        
+        // Optimistically update timestamp to restart countdown immediately
+        const nowMs = Date.now();
+        localStorage.setItem('agrispectra_last_record_timestamp', nowMs.toString());
+        
+        const timeStr = new Date(nowMs).toLocaleTimeString('th-TH');
+        localStorage.setItem('agrispectra_last_record_time', timeStr);
+        setLastRecordTime(timeStr);
 
         const today = getTodayStr();
         const hour = new Date().getHours();
@@ -157,24 +192,17 @@ function Energy() {
             }
         } catch (e) {
             console.warn('Failed to record energy:', e);
+        } finally {
+            isRecordingRef.current = false;
         }
     }, [fetchDailyData, fetchMonthlyTotal]);
 
-    // --- setInterval: record every 5 minutes reliably ---
+    // Trigger recording when countdown hits 0
     useEffect(() => {
-        // Record immediately on first load (if watts > 0)
-        const initialTimer = setTimeout(() => doRecordEnergy(), 3000);
-
-        // Then every 5 minutes
-        const interval = setInterval(() => {
+        if (nextRecordIn === 0) {
             doRecordEnergy();
-        }, 300000); // 5 min = 300,000 ms
-
-        return () => {
-            clearTimeout(initialTimer);
-            clearInterval(interval);
-        };
-    }, [doRecordEnergy]);
+        }
+    }, [nextRecordIn, doRecordEnergy]);
 
     // --- WebSocket for live power data (no dependency on recording) ---
     useEffect(() => {
@@ -289,8 +317,8 @@ function Energy() {
     }, [dbHourlyData]);
 
     const dailyTotalKwh = useMemo(() => {
-        if (dbDailyTotal > 0) return dbDailyTotal.toFixed(2);
-        return hourlyKwh.reduce((sum, h) => sum + h.kwh, 0).toFixed(2);
+        if (dbDailyTotal > 0) return dbDailyTotal.toFixed(4);
+        return hourlyKwh.reduce((sum, h) => sum + h.kwh, 0).toFixed(4);
     }, [dbDailyTotal, hourlyKwh]);
 
     const maxHourlyKwh = useMemo(() => {
@@ -299,7 +327,7 @@ function Energy() {
     }, [hourlyKwh]);
 
     const monthlyTotalKwh = useMemo(() => {
-        return dbMonthlyTotal > 0 ? dbMonthlyTotal.toFixed(1) : '0.0';
+        return dbMonthlyTotal > 0 ? dbMonthlyTotal.toFixed(4) : '0.0000';
     }, [dbMonthlyTotal]);
 
     if (isLoading) {
@@ -364,9 +392,25 @@ function Energy() {
                     </button>
                 )}
                 {isToday && (
-                    <div className="flex items-center gap-2 h-12 px-4">
-                        <div className="w-2 h-2 rounded-full bg-[#34D399] animate-pulse"></div>
-                        <span className="text-[#34D399] font-bold text-[10px] tracking-widest uppercase">Live Recording</span>
+                    <div className="flex items-center gap-4 h-12 px-4 bg-[#111] border border-[#222] rounded-xl">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-[#34D399] animate-pulse"></div>
+                            <span className="text-[#34D399] font-bold text-[10px] tracking-widest uppercase">Live Recording</span>
+                        </div>
+                        <div className="w-px h-6 bg-[#333]"></div>
+                        <div className="flex flex-col">
+                            <span className="text-[#625D71] text-[8px] font-bold uppercase tracking-widest">Next Record</span>
+                            <span className="text-white text-[10px] font-mono">{Math.floor(nextRecordIn / 60)}:{(nextRecordIn % 60).toString().padStart(2, '0')}</span>
+                        </div>
+                        {lastRecordTime && (
+                            <>
+                                <div className="w-px h-6 bg-[#333]"></div>
+                                <div className="flex flex-col">
+                                    <span className="text-[#625D71] text-[8px] font-bold uppercase tracking-widest">Last Recorded</span>
+                                    <span className="text-[#3B82F6] text-[10px] font-mono">{lastRecordTime}</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
