@@ -34,15 +34,4 @@ func (r *UserRepo) CheckPassword(hashedPassword, password string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 }
 
-func (r *UserRepo) SeedAdminUser() error {
-	var count int64
-	r.db.Model(&models.User{}).Where("username = ?", "admin").Count(&count)
-	if count == 0 {
-		user := &models.User{
-			Username: "admin",
-			Password: "1234", // default password
-		}
-		return r.CreateUser(user)
-	}
-	return nil
-}
+

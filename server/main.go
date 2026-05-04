@@ -44,11 +44,6 @@ func main() {
 	lightProfileRepo := repository.NewLightProfileRepo(db) // เพิ่มบรรทัดนี้
 	energyRepo := repository.NewEnergyRepo(db)
 
-	// Seed admin user
-	if err := userRepo.SeedAdminUser(); err != nil {
-		log.Printf("Warning: Failed to seed admin user: %v", err)
-	}
-
 	// Seed mock energy data (May 1-3 + April 2026)
 	if err := energyRepo.SeedMockData(); err != nil {
 		log.Printf("Warning: Failed to seed energy data: %v", err)
