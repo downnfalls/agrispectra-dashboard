@@ -30,11 +30,12 @@ WebSocketsClient webSocket;
 Preferences preferences;
 Adafruit_TSL2591 tsl = Adafruit_TSL2591(2591);
 
-const char *server_ip = "192.168.1.122";
+const char *server_ip = "172.20.10.4";
 const int server_port = 8080;
-const char *ssid = "Mango_2.4G";
-const char *password = "84002201";
+const char *ssid = "June";
+const char *password = "12345678";
 const char* ntpServer = "pool.ntp.org";
+
 
 
 const long  gmtOffset_sec = 7 * 3600;
@@ -174,7 +175,25 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
           if (!profile.isNull()) {
 
             configuration = profile;
+// --- test print Stage --- ///
+            Serial.println("New recieved Stage!");
+            
+            JsonObject allStages = configuration["stages"].as<JsonObject>();
 
+            for (JsonPair kv : allStages) {
+  
+                
+                String stageName = kv.key().c_str(); 
+                
+                
+                int leafValue = kv.value()["leaf"].as<int>(); 
+             
+                Serial.print("Name: ");
+                Serial.print(stageName);
+                Serial.print(" | Leaf = ");
+                Serial.println(leafValue);
+            }
+// --- test print Stage --- ///
             String profileStr;
             serializeJson(profile, profileStr);
 
@@ -302,7 +321,7 @@ int getCurrentPeriodValue() {
 
   // 1. Get current time from NTP
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getLocalTime(&timeinfo, 10)) {
     Serial.println("[TIMER] Failed to obtain time from NTP");
     return 0; // Safe default fallback if time isn't synced
   }
@@ -511,6 +530,8 @@ void setup() {
   Serial.setDebugOutput(true);
   Serial.println("\n--- Booting ESP32 ---");
 
+  
+
   ledcAttach(WHITE_PWM, FREQUENCY, RESOLUTION);
   ledcAttach(RED_PWM, FREQUENCY, RESOLUTION);
   ledcAttach(BLUE_PWM, FREQUENCY, RESOLUTION);
@@ -533,7 +554,10 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
+  
   Serial.println("\nWiFi connected");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 

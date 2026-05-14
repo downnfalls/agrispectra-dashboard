@@ -13,8 +13,8 @@
 #endif
 
 // Pin Definitions
-#define I2C_SDA 14
-#define I2C_SCL 15
+
+
 #define PWDN_GPIO_NUM  32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM  0
@@ -36,23 +36,15 @@
 
 
 // --- Configurations ---
-const char *server_ip = "192.168.1.122";
+const char *server_ip = "172.20.10.4";
 const int server_port = 8080;
-const char *ssid = "Mango_2.4G";
-const char *password = "84002201";
-const char* ntpServer = "pool.ntp.org";
-
-
+const char *ssid = "June";
+const char *password = "12345678";
 
 // --- Variables Init ---
 
 const String server_url = "http://" + String(server_ip) + ":" + String(server_port);
-
-
-JsonDocument configuration;
 JsonDocument resultAfterAnalyse;
-
-
 
 // --- Functions ---
 camera_fb_t* takePhoto() {
@@ -62,8 +54,8 @@ camera_fb_t* takePhoto() {
   fb = esp_camera_fb_get();
   
   if (!fb) {
-    Serial.println("5");
-    Serial.println("[CAM] Error: Capture Failed");
+    // Serial.println("5");
+    // Serial.println("[CAM] Error: Capture Failed");
     return NULL;
   }
   
@@ -79,50 +71,37 @@ void sendAnalyseResult(int leaf_count,bool harvestable){
    resultAfterAnalyse["harvestable"] = harvestable;
    serializeJson(resultAfterAnalyse, Serial); 
   
-   Serial.println();
+  //  Serial.println();
    
    
-  }
-
-
-void analysePhoto(camera_fb_t* myPhoto) {
-  int fake_leaf_count = 22;
-  bool fake_harvestable = false;
-
-  sendAnalyseResult(fake_leaf_count, fake_harvestable );
-
-  
 }
 
+
 void analyseAndUpload() {
-
   camera_fb_t* myPhoto = takePhoto();
-
   if (myPhoto == NULL) return;
 
-  analysePhoto(myPhoto);
-
-  Serial.printf("[SYSTEM] Got image, size: %zu bytes\n", myPhoto->len);
+  // Serial.printf("[SYSTEM] Got image, size: %zu bytes\n", myPhoto->len);
 
   HTTPClient http;
+  http.setTimeout(15000); 
   http.begin(server_url + "/hardware/upload-image");
 
-  // จัดการ Multipart Form Data แบบ Manual เพื่อรองรับ ESP32 Core รุ่นใหม่
   String boundary = "----ESP32Boundary" + String(millis(), HEX);
   http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+  http.addHeader("Connection", "close");
 
-  String head = "--" + boundary + "\r\n";
-  head += "Content-Disposition: form-data; name=\"image\"; filename=\"scan.jpg\"\r\n";
-  head += "Content-Type: image/jpeg\r\n\r\n";
+  String head = "--" + boundary + "\r\n"
+                "Content-Disposition: form-data; name=\"image\"; filename=\"scan.jpg\"\r\n"
+                "Content-Type: image/jpeg\r\n\r\n";
+                
   String tail = "\r\n--" + boundary + "--\r\n";
 
   size_t totalLen = head.length() + myPhoto->len + tail.length();
-  uint8_t *payload = (uint8_t *)malloc(totalLen);
+  
+  uint8_t *payload = (uint8_t *)ps_malloc(totalLen);
   
   if (payload) {
-
-    
-
     memcpy(payload, head.c_str(), head.length());
     memcpy(payload + head.length(), myPhoto->buf, myPhoto->len);
     memcpy(payload + head.length() + myPhoto->len, tail.c_str(), tail.length());
@@ -130,23 +109,26 @@ void analyseAndUpload() {
     int httpResponseCode = http.POST(payload, totalLen);
 
     if (httpResponseCode > 0) {
-      Serial.printf("[HTTP] POST Result: %d\n", httpResponseCode);
-      Serial.println("[HTTP] Response: " + http.getString());
+      // Serial.printf("[HTTP] POST Result: %d\n", httpResponseCode);
+      // Serial.println("[HTTP] Response: " + http.getString());
 
-
+      // ส่งกลับไปให้บอร์ด Main หลังจากส่งรูปขึ้น Server สำเร็จแล้วเท่านั้น
+      int fake_leaf_count = 22;  
+      bool fake_harvestable = false;
+      sendAnalyseResult(fake_leaf_count, fake_harvestable);
       
     } else {
-      Serial.printf("[HTTP] POST Failed, error: %s\n", http.errorToString(httpResponseCode).c_str());
+      // Serial.printf("[HTTP] POST Failed, error: %s\n", http.errorToString(httpResponseCode).c_str());
     }
-    free(payload); // คืนพื้นที่ที่ใช้พักข้อมูล Multipart
+    
+    free(payload); 
   } else {
-    Serial.println("[SYSTEM] Error: Not enough memory for payload");
+    // Serial.println("[SYSTEM] Error: Not enough memory for payload");
   }
 
   http.end();
-
-  esp_camera_fb_return(myPhoto); // คืนพื้นที่ Frame Buffer ของกล้อง
-  Serial.println("[SYSTEM] Memory returned.");
+  esp_camera_fb_return(myPhoto); 
+  // Serial.println("[SYSTEM] Memory returned.");
 }
 
 
@@ -159,11 +141,12 @@ void analyseAndUpload() {
 
 void setup() {
   // 1. ปิดตัวจับไฟตก (Brownout Detector) ชั่วคราว เพื่อให้รอดพ้นจังหวะไฟกระชากตอนบูท
+
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   Serial.begin(115200);
   Serial.setDebugOutput(true);
-  Serial.println("\n--- Booting ESP32-CAM ---");
+  // Serial.println("\n--- Booting ESP32-CAM ---");
 
   // 2. ตั้งค่าโหมดและลดกำลังส่ง WiFi **ก่อน** สั่งเชื่อมต่อ
   WiFi.mode(WIFI_STA);
@@ -173,12 +156,15 @@ void setup() {
   WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
   
-  Serial.print("Connecting to WiFi");
+  // Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    // Serial.print(".");
   }
-  Serial.println("\nWiFi connected");
+  
+  //  Serial.println("\nWiFi connected");
+  //   Serial.println("WIFI IP : ");
+  //   Serial.println(WiFi.localIP());
 
 
   // Camera Init
@@ -201,18 +187,18 @@ void setup() {
   config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
+  config.xclk_freq_hz = 10000000;
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_LATEST;
   config.fb_location = CAMERA_FB_IN_PSRAM;
-  config.frame_size = FRAMESIZE_VGA;
-  config.jpeg_quality = 10;
+  config.frame_size = FRAMESIZE_UXGA;
+  config.jpeg_quality = 8;
   config.fb_count = 1;
 
-  Serial.println("Initializing Camera...");
-  esp_err_t err = esp_camera_init(&config);
+  // Serial.println("Initializing Camera...");
+  esp_err_t err = esp_camera_init(&config); 
   if (err != ESP_OK) {
-    Serial.printf("Camera init failed 0x%x\n", err);
+    // Serial.printf("Camera init failed 0x%x\n", err);
     delay(3000);
     ESP.restart();
   }
@@ -223,18 +209,20 @@ void setup() {
     if (s->id.PID == OV3660_PID) {
       s->set_vflip(s, 1);
     }
-    s->set_framesize(s, FRAMESIZE_VGA);
+    s->set_framesize(s, FRAMESIZE_UXGA);
+    s->set_brightness(s, -2);
+    s->set_ae_level(s, -2);
   }
 
   // 3. นำ analyseAndUpload(); และ updateLights(); ออกจากตรงนี้
   // แล้วพักระบบสัก 2 วินาทีเพื่อให้กระแสไฟในคาปาซิเตอร์กลับมาเต็มและนิ่ง
-  Serial.println("Waiting for power to stabilize...");
+  // Serial.println("Waiting for power to stabilize...");
   delay(2000);
 
   // เปิดใช้งานตัวจับไฟตกกลับคืนมาเพื่อความปลอดภัยของระบบระยะยาว
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1);
 
-  Serial.println("Setup Completed. Starting main loop...");
+  // Serial.println("Setup Completed. Starting main loop...");
 
   analyseAndUpload();
 }
@@ -248,14 +236,21 @@ void setup() {
 void loop() {
   
   
-  if (Serial.available()) {
+ if (Serial.available()) {
 
-    String incomingCommand = Serial.readStringUntil('\n');
-    incomingCommand.trim();
-    if(incomingCommand == "RESCAN"){
-      analyseAndUpload();
-      }
+   String incomingCommand = Serial.readStringUntil('\n');
+   incomingCommand.trim();
+   if(incomingCommand == "RESCAN"){
+     analyseAndUpload();
+     }
+
+      
+
+      // analyseAndUpload();
   }
 
-  
+
 }
+
+  
+
