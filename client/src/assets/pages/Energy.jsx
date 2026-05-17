@@ -28,7 +28,6 @@ function Energy() {
     const [isLoading, setIsLoading] = useState(true);
     const [hardwareStatus, setHardwareStatus] = useState('OFFLINE');
     const dateInputRef = useRef(null);
-    const lastRecordTimeRef = useRef(0); // throttle recording
 
     // --- Date Navigation ---
     const [selectedDate, setSelectedDate] = useState(getTodayStr);
@@ -122,87 +121,15 @@ function Energy() {
         fetchMonthlyTotal(selectedDate);
     }, [selectedDate, fetchDailyData, fetchMonthlyTotal]);
 
-    // --- Use a ref to always hold the latest watts for recording ---
-    const liveWattsRef = useRef(0);
-    const selectedDateRef = useRef(selectedDate);
-    selectedDateRef.current = selectedDate;
-
-    // --- State for UX indicators (Persisted) ---
-    const [lastRecordTime, setLastRecordTime] = useState(() => {
-        return localStorage.getItem('agrispectra_last_record_time') || null;
-    });
-
-    const [now, setNow] = useState(Date.now());
-
-    // Update 'now' every second to drive the countdown
+    // --- Auto-refresh data from DB every 5 minutes (backend records automatically) ---
     useEffect(() => {
-        const interval = setInterval(() => setNow(Date.now()), 1000);
+        if (!isToday) return;
+        const interval = setInterval(() => {
+            fetchDailyData(selectedDate);
+            fetchMonthlyTotal(selectedDate);
+        }, 5 * 60 * 1000); // every 5 minutes
         return () => clearInterval(interval);
-    }, []);
-
-    // Calculate remaining seconds to the next 5-minute clock boundary (e.g. 20:00, 20:05)
-    const nextRecordIn = useMemo(() => {
-        const currentMs = now;
-        const windowSize = 300000; // 5 minutes in ms
-        const nextBoundary = Math.ceil((currentMs + 1000) / windowSize) * windowSize;
-        const remaining = Math.floor((nextBoundary - currentMs) / 1000);
-        return remaining > 0 ? remaining : 0;
-    }, [now]);
-
-    // --- Record energy to DB ---
-    const isRecordingRef = useRef(false);
-
-    const doRecordEnergy = useCallback(async () => {
-        if (isRecordingRef.current) return;
-
-        const watts = liveWattsRef.current;
-        isRecordingRef.current = true;
-        
-        const nowMs = Date.now();
-        const timeStr = new Date(nowMs).toLocaleTimeString('th-TH');
-        localStorage.setItem('agrispectra_last_record_time', timeStr);
-        setLastRecordTime(timeStr);
-
-        const today = getTodayStr();
-        const hour = new Date().getHours();
-        // kWh for a 5-minute interval: watts × (5/60) hours / 1000
-        const kwh = (watts * (5 / 60)) / 1000;
-
-        try {
-            const token = sessionStorage.getItem('token');
-            const res = await fetch(`${API_BASE_URL}/api/energy/record`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ date: today, hour, kwh: parseFloat(kwh.toFixed(6)) })
-            });
-            if (res.ok) {
-                console.log(`⚡ Recorded ${kwh.toFixed(6)} kWh for ${today} hour ${hour} (${watts}W)`);
-                // Refresh display if viewing today
-                if (selectedDateRef.current === today) {
-                    fetchDailyData(today);
-                    fetchMonthlyTotal(today);
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to record energy:', e);
-        } finally {
-            isRecordingRef.current = false;
-        }
-    }, [fetchDailyData, fetchMonthlyTotal]);
-
-    // Trigger recording when crossing a 5-minute boundary
-    const lastWindowRef = useRef(Math.floor(Date.now() / 300000));
-
-    useEffect(() => {
-        const currentWindow = Math.floor(now / 300000);
-        if (currentWindow > lastWindowRef.current) {
-            lastWindowRef.current = currentWindow;
-            doRecordEnergy();
-        }
-    }, [now, doRecordEnergy]);
+    }, [isToday, selectedDate, fetchDailyData, fetchMonthlyTotal]);
 
     // --- WebSocket for live power data (no dependency on recording) ---
     useEffect(() => {
@@ -274,8 +201,8 @@ function Energy() {
 
                     const finalWatts = Number.isNaN(calculatedWatts) ? 0 : calculatedWatts;
 
-                    // Update ref for recording
-                    liveWattsRef.current = finalWatts;
+                    // Update ref for recording (kept for display)
+                    // liveWattsRef removed — backend records energy now
 
                     setLiveData({
                         currentWatts: finalWatts,
@@ -395,22 +322,13 @@ function Energy() {
                     <div className="flex items-center gap-4 h-12 px-4 bg-[#111] border border-[#222] rounded-xl">
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-[#34D399] animate-pulse"></div>
-                            <span className="text-[#34D399] font-bold text-[10px] tracking-widest uppercase">Live Recording</span>
+                            <span className="text-[#34D399] font-bold text-[10px] tracking-widest uppercase">Server Auto-Recording</span>
                         </div>
                         <div className="w-px h-6 bg-[#333]"></div>
                         <div className="flex flex-col">
-                            <span className="text-[#625D71] text-[8px] font-bold uppercase tracking-widest">Next Record</span>
-                            <span className="text-white text-[10px] font-mono">{Math.floor(nextRecordIn / 60)}:{(nextRecordIn % 60).toString().padStart(2, '0')}</span>
+                            <span className="text-[#625D71] text-[8px] font-bold uppercase tracking-widest">Interval</span>
+                            <span className="text-white text-[10px] font-mono">Every 5 min</span>
                         </div>
-                        {lastRecordTime && (
-                            <>
-                                <div className="w-px h-6 bg-[#333]"></div>
-                                <div className="flex flex-col">
-                                    <span className="text-[#625D71] text-[8px] font-bold uppercase tracking-widest">Last Recorded</span>
-                                    <span className="text-[#3B82F6] text-[10px] font-mono">{lastRecordTime}</span>
-                                </div>
-                            </>
-                        )}
                     </div>
                 )}
             </div>

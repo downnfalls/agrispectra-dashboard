@@ -2,11 +2,15 @@ package handler
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"server/internal/models"
+	"server/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -24,6 +28,19 @@ var (
 		},
 	}
 )
+
+// --- Hardware LED Power Constants (from datasheet, matching Energy.jsx) ---
+var maxWattsPerChannel = struct {
+	White   float64
+	DeepRed float64
+	FarRed  float64
+	Blue    float64
+}{
+	White:   (2.75 * 65.0 / 1000.0) * 180.0,  // White 6500K
+	DeepRed: (2.0 * 700.0 / 1000.0) * 54.0,   // Deep Red 660nm
+	FarRed:  (2.0 * 350.0 / 1000.0) * 18.0,   // Far Red 730nm
+	Blue:    (2.975 * 350.0 / 1000.0) * 36.0,  // Royal Blue 450nm
+}
 
 type ColorData struct {
 	Value float64 `json:"value"`
@@ -44,10 +61,60 @@ type HardwareState struct {
 	LastCaptureTime string    `json:"last_capture_time,omitempty"`
 }
 
-type HardwareHandler struct{}
+type HardwareHandler struct {
+	energyRepo *repository.EnergyRepo
+}
 
-func NewHardwareHandler() *HardwareHandler {
-	return &HardwareHandler{}
+func NewHardwareHandler(energyRepo *repository.EnergyRepo) *HardwareHandler {
+	return &HardwareHandler{energyRepo: energyRepo}
+}
+
+// calculateWatts คำนวณ watts จาก PWM values ของ ESP32
+func calculateWatts(state *HardwareState) float64 {
+	if state == nil {
+		return 0
+	}
+	watts := (maxWattsPerChannel.Blue * (state.Blue.Pwm / 100)) +
+		(maxWattsPerChannel.DeepRed * (state.Red.Pwm / 100)) +
+		(maxWattsPerChannel.FarRed * (state.FarRed.Pwm / 100)) +
+		(maxWattsPerChannel.White * (state.White.Pwm / 100))
+	return math.Round(watts)
+}
+
+// StartEnergyRecorder เริ่ม goroutine ที่บันทึกพลังงานลง DB ทุก 5 นาทีอัตโนมัติ
+func (h *HardwareHandler) StartEnergyRecorder() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	fmt.Println("⚡ Energy Recorder started — recording every 5 minutes")
+
+	for range ticker.C {
+		esp32StateLock.RLock()
+		state := currentESP32State
+		esp32StateLock.RUnlock()
+
+		watts := calculateWatts(state)
+
+		// kWh for a 5-minute interval: watts × (5/60) / 1000
+		kwh := (watts * (5.0 / 60.0)) / 1000.0
+		kwh = math.Round(kwh*1000000) / 1000000 // round to 6 decimal places
+
+		now := time.Now()
+		date := now.Format("2006-01-02")
+		hour := now.Hour()
+
+		record := &models.EnergyRecord{
+			Date: date,
+			Hour: hour,
+			Kwh:  kwh,
+		}
+
+		if err := h.energyRepo.UpsertHourly(record); err != nil {
+			fmt.Printf("❌ Failed to record energy: %v\n", err)
+		} else {
+			fmt.Printf("⚡ Recorded %.6f kWh for %s hour %d (%.0fW)\n", kwh, date, hour, watts)
+		}
+	}
 }
 
 // ฝั่ง ESP32 จะยิง POST โพสต์ข้อมูลมาที่นี่ (อาจจะไม่ต้องใช้ Token)
@@ -264,6 +331,18 @@ func (h *HardwareHandler) EmergencyStop(c *gin.Context) {
 	h.SendCommand(command)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Emergency Stop command sent to hardware"})
+}
+
+// สั่ง Reset ระบบ ESP32
+func (h *HardwareHandler) Reset(c *gin.Context) {
+	command := gin.H{
+		"action":  "RESET",
+		"message": "System reset requested from dashboard",
+	}
+
+	h.SendCommand(command)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Reset command sent to hardware"})
 }
 
 // สั่งให้ ESP32 บังคับส่งข้อมูลมาใหม่

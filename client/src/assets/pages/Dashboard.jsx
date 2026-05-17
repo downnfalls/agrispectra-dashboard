@@ -464,7 +464,7 @@ function Dashboard() {
                 <div className="flex items-center gap-4">
                     <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
                         <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
-                        <span className="text-white font-bold text-[10px] tracking-widest uppercase">ESP32 CAM {hardwareStatus}</span>
+                        <span className="text-white font-bold text-[10px] tracking-widest uppercase">System {hardwareStatus}</span>
                     </div>
                     <UserProfile />
                 </div>

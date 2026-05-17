@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: 'http://140.99.98.15:8080/api',
   withCredentials: true,
 });
 
@@ -23,7 +23,7 @@ api.interceptors.response.use(
       prevRequest.sent = true;
       
       try {
-        const response = await axios.get('http://localhost:8000/api/refresh', {
+        const response = await axios.get('http://140.99.98.15:8080/api/refresh', {
           withCredentials: true
         });
         

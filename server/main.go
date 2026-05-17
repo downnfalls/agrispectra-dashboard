@@ -52,12 +52,15 @@ func main() {
 	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
-	hardwareHandler := handler.NewHardwareHandler()
+	hardwareHandler := handler.NewHardwareHandler(energyRepo)
 	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler)
 	energyHandler := handler.NewEnergyHandler(energyRepo)
 
 	// เริ่มต้นระบบ Broadcast
 	go hardwareHandler.HandleMessages()
+
+	// เริ่มระบบบันทึกพลังงานอัตโนมัติ (ทุก 5 นาที)
+	go hardwareHandler.StartEnergyRecorder()
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -83,6 +86,7 @@ func main() {
 		apiGroup.POST("/deploy", lightProfileHandler.DeployProfile)
 		apiGroup.GET("/hardware/state", hardwareHandler.GetState)
 		apiGroup.POST("/hardware/stop", hardwareHandler.EmergencyStop) // ปุ่ม Emergency Stop
+		apiGroup.POST("/hardware/reset", hardwareHandler.Reset)         // ปุ่ม Reset
 		apiGroup.POST("/hardware/force-rescan", hardwareHandler.ForceRescan) // ปุ่ม Force Re-Scan
 
 		// Energy endpoints
@@ -101,9 +105,9 @@ func main() {
 
 	r.Static("/uploads", "./uploads")
 
-	fmt.Println("🚀 Pfal Server is running on http://localhost:8080")
+	fmt.Println("🚀 Pfal Server is running on http://0.0.0.0:8080")
 
-	err = r.Run(":8080")
+	err = r.Run("0.0.0.0:8080")
 	if err != nil {
 		return
 	}
