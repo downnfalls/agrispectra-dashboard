@@ -135,7 +135,37 @@ function Energy() {
     useEffect(() => {
         let socket = null;
         let isMounted = true;
-        const connectWS = () => {
+        let cachedProfile = null;
+
+        // Fetch deployed profile from server
+        const loadDeployedProfile = async () => {
+            try {
+                const token = sessionStorage.getItem('token');
+                const [deployedRes, profilesRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/deployed-profile`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch(`${API_BASE_URL}/api/light-profiles`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                ]);
+                if (deployedRes.ok && profilesRes.ok) {
+                    const { deployed_profile_id } = await deployedRes.json();
+                    const profiles = await profilesRes.json();
+                    if (deployed_profile_id !== null && deployed_profile_id !== undefined) {
+                        cachedProfile = profiles.find(p => p.profile_id === deployed_profile_id) || null;
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not fetch deployed profile:", e);
+            }
+        };
+
+        // Refresh deployed profile every 30 seconds
+        const profileInterval = setInterval(loadDeployedProfile, 30000);
+
+        const connectWS = async () => {
+            await loadDeployedProfile();
             const wsUrl = API_BASE_URL.replace('http', 'ws') + '/hardware/ws';
             socket = new WebSocket(wsUrl);
             socket.onmessage = (event) => {
@@ -148,14 +178,9 @@ function Energy() {
 
                     // Process payload for power
                     const esp32Payload = data;
-                    const savedDeployedProfileIdStr = localStorage.getItem('agrispectra_deployed_profile');
-                    const savedProfilesStr = localStorage.getItem('agrispectra_profiles');
-                    let currentProfile = null;
-                    if (savedDeployedProfileIdStr && savedProfilesStr) {
-                        const deployedProfileId = JSON.parse(savedDeployedProfileIdStr);
-                        const profiles = JSON.parse(savedProfilesStr);
-                        currentProfile = profiles.find(p => p.id === deployedProfileId);
-                    }
+
+                    // Use cached deployed profile (fetched at connect time)
+                    let currentProfile = cachedProfile;
 
                     // Calculation logic matching Dashboard.jsx
                     let stageRatios = { blue: 25, red: 25, farRed: 25, white: 25 };
@@ -221,6 +246,7 @@ function Energy() {
         connectWS();
         return () => {
             isMounted = false;
+            clearInterval(profileInterval);
             if (socket) socket.close();
         };
     }, []); // No dependencies — WebSocket connects once

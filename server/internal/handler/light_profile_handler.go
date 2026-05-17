@@ -14,12 +14,14 @@ import (
 type LightProfileHandler struct {
 	repo            *repository.LightProfileRepo
 	hardwareHandler *HardwareHandler
+	stateRepo       *repository.SystemStateRepo
 }
 
-func NewLightProfileHandler(repo *repository.LightProfileRepo, hw *HardwareHandler) *LightProfileHandler {
+func NewLightProfileHandler(repo *repository.LightProfileRepo, hw *HardwareHandler, stateRepo *repository.SystemStateRepo) *LightProfileHandler {
 	return &LightProfileHandler{
 		repo:            repo,
 		hardwareHandler: hw,
+		stateRepo:       stateRepo,
 	}
 }
 
@@ -163,8 +165,35 @@ func (h *LightProfileHandler) DeployProfile(c *gin.Context) {
 
 	// 2. ส่งข้อมูลไปยัง ESP32 ผ่าน WebSocket ของจริง
 	h.hardwareHandler.SendCommand(command)
-	
+
+	// 3. บันทึก deployed profile ID ลง DB เพื่อ sync ข้ามเครื่อง
+	if pid, exists := payload["profile_id"]; exists {
+		if pidFloat, ok := pid.(float64); ok {
+			h.stateRepo.SetState("deployed_profile_id", strconv.Itoa(int(pidFloat)))
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Profile " + profileName + " deployed to hardware successfully",
 	})
+}
+
+// GetDeployedProfile returns the currently deployed profile ID.
+// GET /api/deployed-profile
+func (h *LightProfileHandler) GetDeployedProfile(c *gin.Context) {
+	val, err := h.stateRepo.GetState("deployed_profile_id")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get deployed profile"})
+		return
+	}
+
+	var profileId *int
+	if val != "" {
+		parsed, err := strconv.Atoi(val)
+		if err == nil {
+			profileId = &parsed
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deployed_profile_id": profileId})
 }

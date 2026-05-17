@@ -48,16 +48,33 @@ function Dashboard() {
     useEffect(() => {
         let isComponentMounted = true;
 
-        // 1. โหลดข้อมูล Profile ที่ Deployed ไว้ก่อน
-        const savedDeployedProfileIdStr = localStorage.getItem('agrispectra_deployed_profile');
-        const savedProfilesStr = localStorage.getItem('agrispectra_profiles');
+        // 1. โหลดข้อมูล Profile ที่ Deployed ไว้จาก Server (sync ข้ามเครื่อง)
+        const loadDeployedProfile = async () => {
+            const token = sessionStorage.getItem('token');
+            try {
+                const [deployedRes, profilesRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/deployed-profile`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch(`${API_BASE_URL}/api/light-profiles`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                ]);
+                if (deployedRes.ok && profilesRes.ok) {
+                    const { deployed_profile_id } = await deployedRes.json();
+                    const profiles = await profilesRes.json();
+                    if (deployed_profile_id !== null && deployed_profile_id !== undefined) {
+                        const profile = profiles.find(p => p.profile_id === deployed_profile_id);
+                        if (profile) setDeployedProfile(profile);
+                        return profile;
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not fetch deployed profile from server:", e);
+            }
+            return null;
+        };
         let currentProfile = null;
-        if (savedDeployedProfileIdStr && savedProfilesStr) {
-            const deployedProfileId = JSON.parse(savedDeployedProfileIdStr);
-            const profiles = JSON.parse(savedProfilesStr);
-            currentProfile = profiles.find(p => p.id === deployedProfileId);
-            setDeployedProfile(currentProfile);
-        }
 
         // Helper to calculate active period based on local time
         const calculateActivePeriod = (timeline) => {
@@ -185,6 +202,9 @@ function Dashboard() {
         const fetchDashboardData = async () => {
             setIsLoading(true);
             try {
+                // Load deployed profile from server first
+                currentProfile = await loadDeployedProfile();
+
                 // 2. ขอข้อมูลจาก Backend
                 const token = sessionStorage.getItem('token');
                 let esp32Payload = null;

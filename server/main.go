@@ -33,6 +33,7 @@ func main() {
 		&models.LightProfile{},
 		&models.PowerConsumption{},
 		&models.EnergyRecord{},
+		&models.SystemState{},
 	)
 	if err != nil {
 		return
@@ -41,8 +42,9 @@ func main() {
 	// 1. กำหนด Repositories
 	userRepo := repository.NewUserRepo(db)
 	logRepo := repository.NewLogRepo(db)
-	lightProfileRepo := repository.NewLightProfileRepo(db) // เพิ่มบรรทัดนี้
+	lightProfileRepo := repository.NewLightProfileRepo(db)
 	energyRepo := repository.NewEnergyRepo(db)
+	systemStateRepo := repository.NewSystemStateRepo(db)
 
 	// Seed mock energy data (May 1-3 + April 2026)
 	if err := energyRepo.SeedMockData(); err != nil {
@@ -53,7 +55,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
 	hardwareHandler := handler.NewHardwareHandler(energyRepo)
-	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler)
+	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler, systemStateRepo)
 	energyHandler := handler.NewEnergyHandler(energyRepo)
 
 	// เริ่มต้นระบบ Broadcast
@@ -84,6 +86,7 @@ func main() {
 		apiGroup.GET("/light-profiles", lightProfileHandler.GetLightProfiles)
 		apiGroup.DELETE("/light-profiles/:id", lightProfileHandler.DeleteLightProfile)
 		apiGroup.POST("/deploy", lightProfileHandler.DeployProfile)
+		apiGroup.GET("/deployed-profile", lightProfileHandler.GetDeployedProfile)
 		apiGroup.GET("/hardware/state", hardwareHandler.GetState)
 		apiGroup.POST("/hardware/stop", hardwareHandler.EmergencyStop) // ปุ่ม Emergency Stop
 		apiGroup.POST("/hardware/reset", hardwareHandler.Reset)         // ปุ่ม Reset

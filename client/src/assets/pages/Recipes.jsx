@@ -58,13 +58,7 @@ export default function Recipes() {
         return null;
     });
 
-    const [deployedProfileId, setDeployedProfileId] = useState(() => {
-        const saved = localStorage.getItem('agrispectra_deployed_profile');
-        if (saved) {
-            try { return JSON.parse(saved); } catch (e) { console.error('Failed to parse deployed profile', e); }
-        }
-        return null;
-    });
+    const [deployedProfileId, setDeployedProfileId] = useState(null);
 
     useEffect(() => {
         localStorage.setItem('agrispectra_profiles', JSON.stringify(profiles));
@@ -78,13 +72,29 @@ export default function Recipes() {
         }
     }, [activeProfileId]);
 
+    // Fetch deployed profile from server + poll every 5 seconds for cross-client sync
     useEffect(() => {
-        if (deployedProfileId !== null && deployedProfileId !== undefined) {
-            localStorage.setItem('agrispectra_deployed_profile', JSON.stringify(deployedProfileId));
-        } else {
-            localStorage.removeItem('agrispectra_deployed_profile');
-        }
-    }, [deployedProfileId]);
+        const fetchDeployedProfile = async () => {
+            try {
+                const token = sessionStorage.getItem('token');
+                const res = await fetch(`${API_BASE_URL}/api/deployed-profile`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const { deployed_profile_id } = await res.json();
+                    setDeployedProfileId(prev => {
+                        if (prev !== deployed_profile_id) return deployed_profile_id;
+                        return prev;
+                    });
+                }
+            } catch (e) {
+                console.warn("Could not fetch deployed profile:", e);
+            }
+        };
+        fetchDeployedProfile();
+        const interval = setInterval(fetchDeployedProfile, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
     const [profilesSnapshot, setProfilesSnapshot] = useState(null);
 

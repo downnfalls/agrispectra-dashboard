@@ -43,3 +43,8 @@ type Token struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
+
+type SystemState struct {
+	Key   string `gorm:"primaryKey" json:"key"`
+	Value string `json:"value"`
+}
