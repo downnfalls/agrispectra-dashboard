@@ -52,12 +52,15 @@ func main() {
 	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
-	hardwareHandler := handler.NewHardwareHandler()
+	hardwareHandler := handler.NewHardwareHandler(energyRepo)
 	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler)
 	energyHandler := handler.NewEnergyHandler(energyRepo)
 
 	// เริ่มต้นระบบ Broadcast
 	go hardwareHandler.HandleMessages()
+
+	// เริ่มระบบบันทึกพลังงานอัตโนมัติ (ทุก 5 นาที)
+	go hardwareHandler.StartEnergyRecorder()
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
