@@ -266,6 +266,18 @@ func (h *HardwareHandler) EmergencyStop(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Emergency Stop command sent to hardware"})
 }
 
+// สั่ง Reset ระบบ ESP32
+func (h *HardwareHandler) Reset(c *gin.Context) {
+	command := gin.H{
+		"action":  "RESET",
+		"message": "System reset requested from dashboard",
+	}
+
+	h.SendCommand(command)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Reset command sent to hardware"})
+}
+
 // สั่งให้ ESP32 บังคับส่งข้อมูลมาใหม่
 func (h *HardwareHandler) ForceRescan(c *gin.Context) {
 	command := gin.H{

@@ -32,7 +32,7 @@ const DashboardLayout = () => {
                     </nav>
                 </div>
 
-                <div className="px-4">
+                <div className="px-4 flex flex-col gap-2">
                     <button 
                         onClick={async () => {
                             if (window.confirm("🚨 ARE YOU SURE? This will immediately SHUT DOWN all hardware systems!")) {
@@ -58,6 +58,32 @@ const DashboardLayout = () => {
                         className="w-full border border-red-900/50 hover:bg-red-900/20 text-red-500 font-bold text-[10px] tracking-widest uppercase py-4 rounded-xl transition-colors"
                     >
                         Emergency Stop
+                    </button>
+                    <button 
+                        onClick={async () => {
+                            if (window.confirm("🔄 ยืนยันการ Reset ระบบ?")) {
+                                try {
+                                    const token = sessionStorage.getItem('token');
+                                    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/hardware/reset`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`
+                                        }
+                                    });
+                                    if (response.ok) {
+                                        alert("🔄 Reset command sent successfully.");
+                                    } else {
+                                        alert("❌ Failed to send Reset command. Please check connection.");
+                                    }
+                                } catch (err) {
+                                    console.error("Reset Error:", err);
+                                    alert("❌ System Error during Reset.");
+                                }
+                            }
+                        }}
+                        className="w-full border border-amber-900/50 hover:bg-amber-900/20 text-amber-500 font-bold text-[10px] tracking-widest uppercase py-4 rounded-xl transition-colors"
+                    >
+                        Reset
                     </button>
                 </div>
             </aside>

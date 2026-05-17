@@ -83,6 +83,7 @@ func main() {
 		apiGroup.POST("/deploy", lightProfileHandler.DeployProfile)
 		apiGroup.GET("/hardware/state", hardwareHandler.GetState)
 		apiGroup.POST("/hardware/stop", hardwareHandler.EmergencyStop) // ปุ่ม Emergency Stop
+		apiGroup.POST("/hardware/reset", hardwareHandler.Reset)         // ปุ่ม Reset
 		apiGroup.POST("/hardware/force-rescan", hardwareHandler.ForceRescan) // ปุ่ม Force Re-Scan
 
 		// Energy endpoints
