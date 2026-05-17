@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import agriImage from './login/resources/Agriculture.png';
 import UserProfile from '../components/UserProfile';
 import { API_BASE_URL } from '../../config';
+import { fetchDeployedProfile } from '../utils/profileUtils';
 
 // --- Hardware LED Power Constants (from datasheet) ---
 // Max power per channel = Forward Voltage × Current × LED Count
@@ -50,29 +51,9 @@ function Dashboard() {
 
         // 1. โหลดข้อมูล Profile ที่ Deployed ไว้จาก Server (sync ข้ามเครื่อง)
         const loadDeployedProfile = async () => {
-            const token = sessionStorage.getItem('token');
-            try {
-                const [deployedRes, profilesRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/api/deployed-profile`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    }),
-                    fetch(`${API_BASE_URL}/api/light-profiles`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                ]);
-                if (deployedRes.ok && profilesRes.ok) {
-                    const { deployed_profile_id } = await deployedRes.json();
-                    const profiles = await profilesRes.json();
-                    if (deployed_profile_id !== null && deployed_profile_id !== undefined) {
-                        const profile = profiles.find(p => p.profile_id === deployed_profile_id);
-                        if (profile) setDeployedProfile(profile);
-                        return profile;
-                    }
-                }
-            } catch (e) {
-                console.warn("Could not fetch deployed profile from server:", e);
-            }
-            return null;
+            const profile = await fetchDeployedProfile();
+            if (profile) setDeployedProfile(profile);
+            return profile;
         };
         let currentProfile = null;
 

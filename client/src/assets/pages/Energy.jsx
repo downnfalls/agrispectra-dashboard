@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import UserProfile from '../components/UserProfile';
 import { API_BASE_URL } from '../../config';
+import { fetchDeployedProfile } from '../utils/profileUtils';
 
 // --- Hardware LED Power Constants (from datasheet) ---
 const HW_POWER = {
@@ -139,26 +140,7 @@ function Energy() {
 
         // Fetch deployed profile from server
         const loadDeployedProfile = async () => {
-            try {
-                const token = sessionStorage.getItem('token');
-                const [deployedRes, profilesRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/api/deployed-profile`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    }),
-                    fetch(`${API_BASE_URL}/api/light-profiles`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                ]);
-                if (deployedRes.ok && profilesRes.ok) {
-                    const { deployed_profile_id } = await deployedRes.json();
-                    const profiles = await profilesRes.json();
-                    if (deployed_profile_id !== null && deployed_profile_id !== undefined) {
-                        cachedProfile = profiles.find(p => p.profile_id === deployed_profile_id) || null;
-                    }
-                }
-            } catch (e) {
-                console.warn("Could not fetch deployed profile:", e);
-            }
+            cachedProfile = await fetchDeployedProfile();
         };
 
         // Refresh deployed profile every 30 seconds

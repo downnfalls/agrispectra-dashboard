@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import UserProfile from '../components/UserProfile';
 import agriImage from './login/resources/Agriculture.png';
 import { API_BASE_URL } from '../../config';
+import { fetchDeployedProfileId } from '../utils/profileUtils';
 
 // Helper to calculate total ratio correctly
 const normalizeRatios = (b, r, fr, w) => {
@@ -74,25 +75,12 @@ export default function Recipes() {
 
     // Fetch deployed profile from server + poll every 5 seconds for cross-client sync
     useEffect(() => {
-        const fetchDeployedProfile = async () => {
-            try {
-                const token = sessionStorage.getItem('token');
-                const res = await fetch(`${API_BASE_URL}/api/deployed-profile`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const { deployed_profile_id } = await res.json();
-                    setDeployedProfileId(prev => {
-                        if (prev !== deployed_profile_id) return deployed_profile_id;
-                        return prev;
-                    });
-                }
-            } catch (e) {
-                console.warn("Could not fetch deployed profile:", e);
-            }
+        const pollDeployed = async () => {
+            const id = await fetchDeployedProfileId();
+            setDeployedProfileId(prev => (prev !== id ? id : prev));
         };
-        fetchDeployedProfile();
-        const interval = setInterval(fetchDeployedProfile, 5000);
+        pollDeployed();
+        const interval = setInterval(pollDeployed, 5000);
         return () => clearInterval(interval);
     }, []);
 
