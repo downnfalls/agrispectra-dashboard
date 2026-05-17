@@ -280,7 +280,7 @@ function Energy() {
             {/* Header */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="flex flex-col">
-                    <h1 className="text-white text-xl sm:text-3xl font-bold tracking-tight mb-1">Energy Intelligence</h1>
+                    <h1 className="text-white text-xl sm:text-3xl font-bold tracking-tight mb-1">Energy Consumption</h1>
                     <p className="text-[#625D71] text-[10px] font-bold tracking-[0.2em] uppercase">Consumption Summary & Efficiency</p>
                 </div>
                 <div className="flex items-center gap-3 sm:gap-4">
