@@ -479,7 +479,7 @@ function Dashboard() {
                     {/* Big Image Container (Camera View) */}
                     <div className="bg-[#151515] rounded-3xl overflow-hidden relative border border-[#222] h-[480px] p-1 flex flex-col">
                         <div className="relative flex-1 rounded-[1.4rem] overflow-hidden bg-[#1D1A24]">
-                            <img src={currentImageUrl} alt="Canopy" className="w-full h-full object-cover absolute inset-0 opacity-80" />
+                            <img src={currentImageUrl} alt="Canopy" className="w-full h-full object-contain absolute inset-0" />
                         </div>
 
                         {/* Capture Controls Bar */}
