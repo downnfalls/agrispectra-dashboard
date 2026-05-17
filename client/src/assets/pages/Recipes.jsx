@@ -525,13 +525,13 @@ export default function Recipes() {
         <div className="flex flex-col h-full bg-[#0A0A0A] text-white overflow-y-auto">
 
             {/* Header */}
-            <header className="px-8 lg:px-12 pt-8 pb-6 flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-8">
-                    <h1 className="text-[#CBA6F7] text-3xl font-bold tracking-wide">JANGKOPF</h1>
+            <header className="px-4 md:px-8 lg:px-12 pt-4 md:pt-8 pb-4 md:pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0">
+                <div className="flex items-center gap-4 sm:gap-8">
+                    <h1 className="text-[#CBA6F7] text-xl sm:text-3xl font-bold tracking-wide">JANGKOPF</h1>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="bg-[#151515] rounded-full px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-3 border border-[#222]">
                         <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
                         <span className="text-white font-bold text-[10px] tracking-widest uppercase">System {hardwareStatus}</span>
                     </div>
@@ -554,14 +554,14 @@ export default function Recipes() {
             ) : (
                 <>
                     {/* Profile Selection Pills */}
-                    <div className="px-8 lg:px-12 pb-6 flex flex-wrap gap-4 shrink-0">
+                    <div className="px-4 md:px-8 lg:px-12 pb-4 md:pb-6 flex flex-wrap gap-3 md:gap-4 shrink-0 overflow-x-auto">
                         {profiles.map(profile => {
                             const isActive = activeProfileId === profile.id;
                             return (
                                 <div
                                     key={profile.id}
                                     onClick={() => setActiveProfileId(profile.id)}
-                                    className={`group relative flex flex-col justify-center px-5 py-3 rounded-2xl border cursor-pointer transition-all duration-200 min-w-[180px] h-20 ${isActive
+                                    className={`group relative flex flex-col justify-center px-4 md:px-5 py-3 rounded-2xl border cursor-pointer transition-all duration-200 min-w-[150px] md:min-w-[180px] h-20 ${isActive
                                         ? 'border-[#3B82F6] bg-gradient-to-br from-[#3B82F6]/10 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.15)]'
                                         : 'border-[#222] hover:border-[#3B82F6]/50 bg-[#111]'
                                         }`}
@@ -617,7 +617,7 @@ export default function Recipes() {
                     <hr className="border-[#222] mx-8 lg:mx-12 mb-8" />
 
                     {/* Stages Grid */}
-                    <div className="grow px-8 lg:px-12 pb-32 flex gap-8 overflow-x-auto items-start">
+                    <div className="grow px-4 md:px-8 lg:px-12 pb-32 flex gap-4 md:gap-8 overflow-x-auto items-start">
                         {activeProfile ? (
                             activeProfile.stages.length > 0 ? (
                                 activeProfile.stages.map((stage, idx) => (
@@ -838,7 +838,7 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
     return (
         <>
             {/* Editable Profile Name */}
-            <div className="px-8 lg:px-12 pb-4 flex items-center shrink-0">
+            <div className="px-4 md:px-8 lg:px-12 pb-4 flex items-center shrink-0">
                 <input
                     type="text"
                     value={profile.name}
@@ -848,7 +848,7 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
                 />
             </div>
 
-            <div className="px-8 lg:px-12 pb-6 flex-1 overflow-y-auto shrink-0 space-y-6">
+            <div className="px-4 md:px-8 lg:px-12 pb-6 flex-1 overflow-y-auto shrink-0 space-y-6">
                 {profile.stages.length > 0 ? (
                     profile.stages.map((stage, idx) => (
                         expandedStageId === stage.id ? (
@@ -997,7 +997,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                 </button>
             </div>
 
-            <div className="grid grid-cols-12 gap-12 lg:gap-16 mb-12">
+            <div className="grid grid-cols-12 gap-6 md:gap-12 lg:gap-16 mb-8 md:mb-12">
                 {/* Timeline */}
                 <div className="col-span-12 xl:col-span-7">
                     <h4 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#625D71] mb-6">Photoperiod Timeline (24H)</h4>

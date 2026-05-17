@@ -275,16 +275,16 @@ function Energy() {
     }
 
     return (
-        <div className="bg-[#0A0A0A] min-h-screen flex flex-col p-8 lg:p-12 gap-8 text-white font-sans">
+        <div className="bg-[#0A0A0A] min-h-screen flex flex-col p-4 md:p-8 lg:p-12 gap-4 md:gap-8 text-white font-sans">
 
             {/* Header */}
-            <header className="flex justify-between items-center">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="flex flex-col">
-                    <h1 className="text-white text-3xl font-bold tracking-tight mb-1">Energy Intelligence</h1>
+                    <h1 className="text-white text-xl sm:text-3xl font-bold tracking-tight mb-1">Energy Intelligence</h1>
                     <p className="text-[#625D71] text-[10px] font-bold tracking-[0.2em] uppercase">Consumption Summary & Efficiency</p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="bg-[#151515] rounded-full px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-3 border border-[#222]">
                         <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
                         <span className="text-[#E0E0E0] font-bold text-[10px] tracking-widest uppercase">System {hardwareStatus}</span>
                     </div>
@@ -293,7 +293,7 @@ function Energy() {
             </header>
 
             {/* Date Navigation */}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
                 <div className="bg-[#151515] border border-[#222] rounded-xl flex items-center h-12 px-2">
                     <button onClick={handlePrevDay} className="p-2 text-[#625D71] hover:text-white transition">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -342,10 +342,10 @@ function Energy() {
             </div>
 
             {/* Main Content */}
-            <div className="grid grid-cols-12 gap-8">
+            <div className="grid grid-cols-12 gap-4 md:gap-8">
 
                 {/* Power Consumption Chart */}
-                <div className="col-span-12 xl:col-span-9 bg-[#111] border border-[#222] rounded-3xl p-10 flex flex-col h-[520px]">
+                <div className="col-span-12 xl:col-span-9 bg-[#111] border border-[#222] rounded-2xl md:rounded-3xl p-4 md:p-10 flex flex-col h-[300px] md:h-[400px] xl:h-[520px]">
                     <div className="flex justify-between items-start mb-10">
                         <div>
                             <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-2">Hourly Consumption (kWh per Hour)</h3>

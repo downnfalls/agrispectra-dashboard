@@ -48,7 +48,7 @@ function LoginPage() {
 
     return (
         <div className="bg-[#0A0A0A] min-h-screen w-full flex flex-row">
-            <div className="bg-[#0A0A0A] relative w-150 overflow-hidden">
+            <div className="bg-[#0A0A0A] relative w-150 overflow-hidden hidden lg:block">
                 <div 
                     className="absolute w-full h-full bg-linear-to-br 
                         from-[#97CBFF33] 
@@ -87,14 +87,14 @@ function LoginPage() {
                 </div>
                 <div className="absolute right-0 top-0 bottom-0 w-px bg-[#222]"></div>
             </div>
-            <div className="flex-1 relative flex flex-col justify-center px-16 lg:px-32 xl:px-48 bg-[#0A0A0A]">
+            <div className="flex-1 relative flex flex-col justify-center px-6 sm:px-12 lg:px-32 xl:px-48 bg-[#0A0A0A]">
                 <div className="max-w-md w-full">
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#111] border border-[#222] mb-8">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#97CBFF]"></div>
                         <span className="text-[#F472B6] text-[10px] font-bold tracking-widest uppercase">New Personnel Enrollment</span>
                     </div>
 
-                    <h2 className="text-white text-4xl font-semibold mb-2">AgriSpectraSystem Access</h2>
+                    <h2 className="text-white text-2xl sm:text-4xl font-semibold mb-2">AgriSpectra<br className="sm:hidden" />System Access</h2>
 
                     <form className="flex flex-col" onSubmit={handleLogin}>
                         {errorMsg && (

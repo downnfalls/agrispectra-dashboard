@@ -454,16 +454,16 @@ function Dashboard() {
     const { metadata, visionInfo, growthState, spectrum, stats } = dashboardData;
 
     return (
-        <div className="p-8 lg:p-12 max-w-[1600px] mx-auto flex flex-col gap-8">
+        <div className="p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-8">
 
             {/* Top Bar */}
-            <header className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-8">
-                    <h1 className="text-[#CBA6F7] text-3xl font-bold tracking-wide">JANGKOPF</h1>
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <div className="flex items-center gap-4 sm:gap-8">
+                    <h1 className="text-[#CBA6F7] text-xl sm:text-3xl font-bold tracking-wide">JANGKOPF</h1>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="bg-[#151515] rounded-full px-4 py-2 flex items-center gap-3 border border-[#222]">
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="bg-[#151515] rounded-full px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-3 border border-[#222]">
                         <div className={`w-2 h-2 rounded-full ${hardwareStatus === 'ONLINE' ? 'bg-[#34D399] shadow-[0_0_8px_#34D399]' : 'bg-red-500'}`}></div>
                         <span className="text-white font-bold text-[10px] tracking-widest uppercase">System {hardwareStatus}</span>
                     </div>
@@ -472,12 +472,12 @@ function Dashboard() {
             </header>
 
             {/* Main Grid */}
-            <div className="grid grid-cols-12 gap-6">
+            <div className="grid grid-cols-12 gap-4 lg:gap-6">
 
                 {/* Left Column (8) */}
                 <div className="col-span-12 xl:col-span-8 flex flex-col gap-6">
                     {/* Big Image Container (Camera View) */}
-                    <div className="bg-[#151515] rounded-3xl overflow-hidden relative border border-[#222] h-[480px] p-1 flex flex-col">
+                    <div className="bg-[#151515] rounded-2xl md:rounded-3xl overflow-hidden relative border border-[#222] h-[240px] md:h-[360px] lg:h-[480px] p-1 flex flex-col">
                         <div className="relative flex-1 rounded-[1.4rem] overflow-hidden bg-[#1D1A24]">
                             <img src={currentImageUrl} alt="Canopy" className="w-full h-full object-contain absolute inset-0" />
                         </div>
