@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { API_BASE_URL } from '../../config';
 
 const DashboardLayout = () => {
     const location = useLocation();
@@ -38,7 +39,7 @@ const DashboardLayout = () => {
                             if (window.confirm("🚨 ARE YOU SURE? This will immediately SHUT DOWN all hardware systems!")) {
                                 try {
                                     const token = sessionStorage.getItem('token');
-                                    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/hardware/stop`, {
+                                    const response = await fetch(`${API_BASE_URL}/api/hardware/stop`, {
                                         method: 'POST',
                                         headers: {
                                             'Authorization': `Bearer ${token}`
@@ -64,7 +65,7 @@ const DashboardLayout = () => {
                             if (window.confirm("🔄 ยืนยันการ Reset ระบบ?")) {
                                 try {
                                     const token = sessionStorage.getItem('token');
-                                    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/hardware/reset`, {
+                                    const response = await fetch(`${API_BASE_URL}/api/hardware/reset`, {
                                         method: 'POST',
                                         headers: {
                                             'Authorization': `Bearer ${token}`

@@ -102,9 +102,9 @@ func main() {
 
 	r.Static("/uploads", "./uploads")
 
-	fmt.Println("🚀 Pfal Server is running on http://localhost:8080")
+	fmt.Println("🚀 Pfal Server is running on http://0.0.0.0:8080")
 
-	err = r.Run(":8080")
+	err = r.Run("0.0.0.0:8080")
 	if err != nil {
 		return
 	}
