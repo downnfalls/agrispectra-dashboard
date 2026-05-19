@@ -6,8 +6,8 @@
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
+#include <prefal-real_inferencing.h>            
 #include "edge-impulse-sdk/dsp/image/image.hpp"
-#include <prefal-real_inferencing.h>
 
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
