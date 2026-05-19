@@ -16,6 +16,12 @@
 #include <Adafruit_TSL2591.h>
 #undef sensor_t
 
+// ==========================================
+// [AI] นำเข้า Library ของ Edge Impulse AI
+// ==========================================
+#include <kriangdet-project-1_inferencing.h> // แก้ชื่อให้ตรงกับ ZIP ของคุณถ้ามีการเปลี่ยน
+#include "edge-impulse-sdk/dsp/image/image.hpp"
+
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
 #define CAMERA_MODEL_AI_THINKER 
@@ -76,6 +82,11 @@ bool harvestable = false;
 String current_stage = "Unknown";
 String last_stage = "Unknown";
 
+// [AI] Variables สำหรับเก็บสถิติ
+int plant_count = 0;
+int ready_count = 0;
+float avg_leaves_per_plant = 0.0;
+
 float blueTarget = 0.0;
 float blueCurrent = 0.0;
 float PWMBLUE = 0.0;
@@ -100,6 +111,25 @@ unsigned long lastMinutePeriod = 0;
 
 JsonDocument configuration;
 
+// ==========================================
+// [AI] Data Callback สำหรับ Edge Impulse
+// ==========================================
+static uint8_t *ei_camera_frame_buffer;
+
+int ei_camera_get_data(size_t offset, size_t length, float *out_ptr) {
+  size_t pixel_ix = offset * 3;
+  size_t pixels_left = length;
+  size_t out_ptr_ix = 0;
+
+  while (pixels_left != 0) {
+    out_ptr[out_ptr_ix] = (ei_camera_frame_buffer[pixel_ix] << 16) + (ei_camera_frame_buffer[pixel_ix + 1] << 8) + ei_camera_frame_buffer[pixel_ix + 2];
+    out_ptr_ix++;
+    pixel_ix += 3;
+    pixels_left--;
+  }
+  return 0;
+}
+
 // --- Functions ---
 camera_fb_t* takePhoto() {
   camera_fb_t * fb = esp_camera_fb_get();
@@ -117,8 +147,85 @@ camera_fb_t* takePhoto() {
 }
 
 void analysePhoto(camera_fb_t* myPhoto) {
-  leaf_count = 22;
-  harvestable = false;
+  
+  // =========================================================================
+  // [AI] รันโมเดลทำนายภาพก่อนส่งขึ้น Server
+  // =========================================================================
+  Serial.println("[AI] Starting Inference...");
+
+  // 1. แปลง JPEG เป็น RGB (ใช้ PSRAM)
+  uint8_t *full_rgb_buf = (uint8_t*)heap_caps_malloc(myPhoto->width * myPhoto->height * 3, MALLOC_CAP_SPIRAM);
+  if (!full_rgb_buf) {
+    Serial.println("[AI] ERR: Failed to allocate PSRAM for Full RGB!");
+    return;
+  }
+
+  bool converted = fmt2rgb888(myPhoto->buf, myPhoto->len, PIXFORMAT_JPEG, full_rgb_buf);
+  if (!converted) {
+    Serial.println("[AI] ERR: JPEG format decoding failed!");
+    free(full_rgb_buf);
+    return;
+  }
+
+  // 2. ย่อขนาดภาพให้เข้ากับโมเดล (ใช้ PSRAM)
+  size_t ei_buf_size = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3;
+  ei_camera_frame_buffer = (uint8_t*)heap_caps_malloc(ei_buf_size, MALLOC_CAP_SPIRAM);
+  if (!ei_camera_frame_buffer) {
+    Serial.println("[AI] ERR: Failed to allocate PSRAM for EI buffer!");
+    free(full_rgb_buf);
+    return;
+  }
+
+  ei::image::processing::crop_and_interpolate_rgb888(
+      full_rgb_buf, myPhoto->width, myPhoto->height,
+      ei_camera_frame_buffer, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT);
+
+  free(full_rgb_buf);
+
+  // 3. เตรียมข้อมูลให้ AI
+  signal_t signal;
+  signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
+  signal.get_data = &ei_camera_get_data;
+
+  // 4. รัน AI
+  ei_impulse_result_t result = { 0 };
+  EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false);
+
+  if (res != EI_IMPULSE_OK) {
+    Serial.printf("[AI] ERR: Failed to run classifier (%d)\n", res);
+    free(ei_camera_frame_buffer);
+    return;
+  }
+
+  // 5. นับค่าใหม่ที่ได้จาก AI (รีเซ็ตก่อนเริ่มนับ)
+  leaf_count = 0;
+  plant_count = 0;
+  ready_count = 0;
+  avg_leaves_per_plant = 0.0;
+
+  #if EI_CLASSIFIER_OBJECT_DETECTION == 1
+    for (uint32_t i = 0; i < result.bounding_boxes_count; i++) {
+        ei_impulse_result_bounding_box_t bb = result.bounding_boxes[i];
+        if (bb.value == 0) continue; 
+
+        if (strcmp(bb.label, "leaf") == 0) leaf_count++;
+        else if (strcmp(bb.label, "plant") == 0) plant_count++;
+        else if (strcmp(bb.label, "ready") == 0) ready_count++;
+    }
+  #endif
+
+  // 6. คำนวณค่าเฉลี่ย
+  if (plant_count > 0) {
+      avg_leaves_per_plant = (float)leaf_count / plant_count;
+  }
+
+  harvestable = (ready_count > 0);
+
+  Serial.printf("[AI] Stats -> Plant: %d, Leaf: %d, Ready: %d | Avg Leaf/Plant: %.2f\n", 
+                 plant_count, leaf_count, ready_count, avg_leaves_per_plant);
+
+  free(ei_camera_frame_buffer); // คืนพื้นที่แรม AI
+  // =========================================================================
 
   String bestStage = "Unknown";
   int maxLeafReq = -1;
@@ -127,7 +234,7 @@ void analysePhoto(camera_fb_t* myPhoto) {
     String stageName = kv.key().c_str();
     JsonObject reqs = kv.value().as<JsonObject>();
 
-    // 1. จัดการเงื่อนไข Leaf Count
+    // 1. จัดการเงื่อนไข Leaf Count (ตอนนี้ใช้ leaf_count จาก AI แล้ว)
     bool hasLeafReq = reqs.containsKey("leaf") && !reqs["leaf"].isNull();
     int reqLeaf = hasLeafReq ? reqs["leaf"].as<int>() : 0;
     bool passLeaf = !hasLeafReq || (leaf_count >= reqLeaf);
@@ -135,8 +242,6 @@ void analysePhoto(camera_fb_t* myPhoto) {
     // 3. ตรวจสอบว่าผ่านทั้ง 2 เงื่อนไขหรือไม่
     if (passLeaf) {
       // 4. เลือกว่าจะเอา Stage ไหนเป็นตัวที่ดีที่สุด (Best Match)
-      // กรณีนี้ ผมให้ความสำคัญกับ "ความต้องการที่สูงกว่า" เป็นหลัก
-      // ถ้า Stage นี้ต้องการเงื่อนไขที่ "ยากกว่า" Stage เดิมที่เคยจำไว้ ให้ถือว่าเก่งขึ้น/โตขึ้น
       if (reqLeaf >= maxLeafReq) {
         maxLeafReq = reqLeaf;
         bestStage = stageName;
@@ -270,8 +375,7 @@ void sendDataToServer() {
   http.begin("http://" + String(server_ip) + ":8080/hardware/state");
   http.addHeader("Content-Type", "application/json");
 
-  // สร้าง JSON String ตามโครงสร้าง
-
+  // สร้าง JSON String ตามโครงสร้าง (ใช้ leaf_count ที่ได้จาก AI)
   String payload = "{\"stage\": \""+(harvestable ? "Harvestable" : current_stage)+"\", \"leaf_count\": " + String(leaf_count) + ", \"total\": "+ light_sensor_result +", \"white\": {\"value\": "+ whiteCurrent +", \"diff\": "+ (whiteCurrent - whiteTarget) +", \"pwm\": "+ PWMWHITE +"}, \"blue\": {\"value\": "+ blueCurrent +", \"diff\": "+ (blueCurrent - blueTarget) +", \"pwm\": "+ PWMBLUE +"}, \"red\": {\"value\": "+ redCurrent+", \"diff\": "+ (redCurrent - redTarget) +", \"pwm\": "+ PWMRED +"}, \"farRed\": {\"value\": "+ farRedCurrent +", \"diff\": "+ (farRedCurrent - farRedTarget) +", \"pwm\": "+ PWMFARRED +"}}";
   Serial.println(payload);
 
@@ -310,19 +414,11 @@ float readFullSpectrum() {
 
   float conversionFactor = (blue * 68.0) + (deepRed * 42.0) + (white * 60.0);
 
-  // Serial.printf("[SENSOR DEBUG] Lux: %f\n", lux);
-  // Serial.printf("[SENSOR DEBUG] Blue: %f\n", blue);
-  // Serial.printf("[SENSOR DEBUG] Deep Red: %f\n", deepRed);
-  // Serial.printf("[SENSOR DEBUG] White: %f\n", white);
-  // Serial.printf("[SENSOR DEBUG] Conversion Factor: %f\n", conversionFactor);
-
   if (conversionFactor <= 0.0) {
     return 0.0; 
   }
 
   float ppfd = lux / conversionFactor;
-
-  // Serial.printf("💡 Lux: %.2f | Visible: %d | IR: %d | PPFD: %f\n", lux, visible, ir, ppfd);
 
   return ppfd;
 
@@ -583,7 +679,7 @@ void setup() {
     Serial.println("[Pref] No Configuration Found!");
   }
 
-  // TSL2591 Init (รวมโค้ดที่ซ้ำซ้อนกันให้เหลือชุดเดียว)
+  // TSL2591 Init
   if (!tsl.begin()) {
     Serial.println("No TSL2591 sensor found ... check your wiring?");
   } else {
@@ -642,8 +738,6 @@ void setup() {
     s->set_framesize(s, FRAMESIZE_VGA);
   }
 
-  // 3. นำ analyseAndUpload(); และ updateLights(); ออกจากตรงนี้
-  // แล้วพักระบบสัก 2 วินาทีเพื่อให้กระแสไฟในคาปาซิเตอร์กลับมาเต็มและนิ่ง
   Serial.println("Waiting for power to stabilize...");
   delay(2000);
 
