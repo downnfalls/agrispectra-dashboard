@@ -10,10 +10,10 @@ const normalizeRatios = (b, r, fr, w) => {
 };
 
 const HW_LIMITS = {
-    blue: 125.0025,
-    red: 381.0,
-    farRed: 65.0025,
-    white: 112.5
+    blue: 208.3375,
+    red: 635.0,
+    farRed: 108.3375,
+    white: 187.5
 };
 
 const checkProfilePPFDLimit = (profile) => {
