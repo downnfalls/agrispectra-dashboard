@@ -717,7 +717,7 @@ void setup() {
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_LATEST;
   config.fb_location = CAMERA_FB_IN_PSRAM;
-  config.frame_size = FRAMESIZE_VGA;
+  config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 10;
   config.fb_count = 1;
 
@@ -735,7 +735,7 @@ void setup() {
     if (s->id.PID == OV3660_PID) {
       s->set_vflip(s, 1);
     }
-    s->set_framesize(s, FRAMESIZE_VGA);
+    s->set_framesize(s, FRAMESIZE_QVGA);
   }
 
   Serial.println("Waiting for power to stabilize...");
