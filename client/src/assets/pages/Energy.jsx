@@ -182,28 +182,34 @@ function Energy() {
                     let calculatedWatts = 0;
                     let live = false;
 
-                    // Correctly extract PWM values as numbers
-                    const pwmBlue = esp32Payload.blue?.pwm;
-                    const pwmRed = esp32Payload.red?.pwm;
-                    const pwmFarRed = esp32Payload.farRed?.pwm;
-                    const pwmWhite = esp32Payload.white?.pwm;
-
-                    if (pwmBlue !== undefined && pwmBlue !== null) {
-                        calculatedWatts = Math.round(
-                            (MAX_WATTS_PER_CHANNEL.blue * (pwmBlue / 100)) +
-                            (MAX_WATTS_PER_CHANNEL.deepRed * ((pwmRed || 0) / 100)) +
-                            (MAX_WATTS_PER_CHANNEL.farRed * ((pwmFarRed || 0) / 100)) +
-                            (MAX_WATTS_PER_CHANNEL.white * ((pwmWhite || 0) / 100))
-                        );
+                    // Prefer power_watts sent directly from ESP32
+                    if (esp32Payload.power_watts !== undefined && esp32Payload.power_watts !== null) {
+                        calculatedWatts = Math.round(esp32Payload.power_watts);
                         live = true;
                     } else {
-                        calculatedWatts = Math.round(
-                            (MAX_WATTS_PER_CHANNEL.blue * (stageRatios.blue / 100) +
-                                MAX_WATTS_PER_CHANNEL.deepRed * (stageRatios.red / 100) +
-                                MAX_WATTS_PER_CHANNEL.farRed * (stageRatios.farRed / 100) +
-                                MAX_WATTS_PER_CHANNEL.white * (stageRatios.white / 100))
-                            * (activeIntensity / 100)
-                        );
+                        // Fallback: calculate from PWM values
+                        const pwmBlue = esp32Payload.blue?.pwm;
+                        const pwmRed = esp32Payload.red?.pwm;
+                        const pwmFarRed = esp32Payload.farRed?.pwm;
+                        const pwmWhite = esp32Payload.white?.pwm;
+
+                        if (pwmBlue !== undefined && pwmBlue !== null) {
+                            calculatedWatts = Math.round(
+                                (MAX_WATTS_PER_CHANNEL.blue * (pwmBlue / 100)) +
+                                (MAX_WATTS_PER_CHANNEL.deepRed * ((pwmRed || 0) / 100)) +
+                                (MAX_WATTS_PER_CHANNEL.farRed * ((pwmFarRed || 0) / 100)) +
+                                (MAX_WATTS_PER_CHANNEL.white * ((pwmWhite || 0) / 100))
+                            );
+                            live = true;
+                        } else {
+                            calculatedWatts = Math.round(
+                                (MAX_WATTS_PER_CHANNEL.blue * (stageRatios.blue / 100) +
+                                    MAX_WATTS_PER_CHANNEL.deepRed * (stageRatios.red / 100) +
+                                    MAX_WATTS_PER_CHANNEL.farRed * (stageRatios.farRed / 100) +
+                                    MAX_WATTS_PER_CHANNEL.white * (stageRatios.white / 100))
+                                * (activeIntensity / 100)
+                            );
+                        }
                     }
 
                     const finalWatts = Number.isNaN(calculatedWatts) ? 0 : calculatedWatts;

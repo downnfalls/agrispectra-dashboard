@@ -53,6 +53,7 @@ type HardwareState struct {
 	LeafCount       int       `json:"leaf_count"`
 	LeafDensity     int       `json:"leaf_density"`
 	Total           float64   `json:"total"`
+	PowerWatts      *float64  `json:"power_watts,omitempty"`
 	White           ColorData `json:"white"`
 	Blue            ColorData `json:"blue"`
 	Red             ColorData `json:"red"`
@@ -69,11 +70,16 @@ func NewHardwareHandler(energyRepo *repository.EnergyRepo) *HardwareHandler {
 	return &HardwareHandler{energyRepo: energyRepo}
 }
 
-// calculateWatts คำนวณ watts จาก PWM values ของ ESP32
+// calculateWatts returns power from ESP32 if available, otherwise calculates from PWM
 func calculateWatts(state *HardwareState) float64 {
 	if state == nil {
 		return 0
 	}
+	// Prefer ESP32-reported power_watts
+	if state.PowerWatts != nil {
+		return math.Round(*state.PowerWatts)
+	}
+	// Fallback: calculate from PWM values
 	watts := (maxWattsPerChannel.Blue * (state.Blue.Pwm / 100)) +
 		(maxWattsPerChannel.DeepRed * (state.Red.Pwm / 100)) +
 		(maxWattsPerChannel.FarRed * (state.FarRed.Pwm / 100)) +
