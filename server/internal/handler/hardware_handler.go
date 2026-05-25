@@ -97,9 +97,15 @@ func (h *HardwareHandler) StartEnergyRecorder() {
 	for range ticker.C {
 		esp32StateLock.RLock()
 		state := currentESP32State
+		isOffline := len(hardwareClients) == 0
 		esp32StateLock.RUnlock()
 
-		watts := calculateWatts(state)
+		var watts float64
+		if isOffline {
+			watts = 0 // Force to 0 if no ESP32 is connected
+		} else {
+			watts = calculateWatts(state)
+		}
 
 		// kWh for a 5-minute interval: watts × (5/60) / 1000
 		kwh := (watts * (5.0 / 60.0)) / 1000.0
