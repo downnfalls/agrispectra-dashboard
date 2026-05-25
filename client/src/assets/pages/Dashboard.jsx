@@ -459,7 +459,7 @@ function Dashboard() {
             {/* Top Bar */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                 <div className="flex items-center gap-4 sm:gap-8">
-                    <h1 className="text-[#CBA6F7] text-xl sm:text-3xl font-bold tracking-wide">JANGKOPF</h1>
+                    <h1 className="text-[#CBA6F7] text-xl sm:text-3xl font-bold tracking-wide">DASHBOARD</h1>
                 </div>
 
                 <div className="flex items-center gap-3 sm:gap-4">

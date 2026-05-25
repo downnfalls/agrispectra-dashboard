@@ -90,6 +90,9 @@ const DashboardLayout = () => {
                 >
                     Reset
                 </button>
+                <div className="mt-4 pt-4 border-t border-[#222] text-center">
+                    <span className="text-[#625D71] font-bold text-[9px] tracking-[0.3em] uppercase">JANGKOPF</span>
+                </div>
             </div>
         </>
     );

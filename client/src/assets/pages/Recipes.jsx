@@ -207,7 +207,7 @@ export default function Recipes() {
         const newId = Date.now();
         setProfiles([...profiles, {
             id: newId,
-            name: `New Profile ${profiles.length + 1}`,
+            name: `New Recipe ${profiles.length + 1}`,
             species: 'UNKNOWN SPECIES',
             stages: []
         }]);
@@ -527,7 +527,7 @@ export default function Recipes() {
             {/* Header */}
             <header className="px-4 md:px-8 lg:px-12 pt-4 md:pt-8 pb-4 md:pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0">
                 <div className="flex items-center gap-4 sm:gap-8">
-                    <h1 className="text-[#CBA6F7] text-xl sm:text-3xl font-bold tracking-wide">JANGKOPF</h1>
+                    <h1 className="text-[#CBA6F7] text-xl sm:text-3xl font-bold tracking-wide">RECIPES</h1>
                 </div>
 
                 <div className="flex items-center gap-3 sm:gap-4">
@@ -604,13 +604,13 @@ export default function Recipes() {
                             );
                         })}
 
-                        {/* Add New Profile Button */}
+                        {/* Add New Recipe Button */}
                         <div
                             onClick={handleAddProfile}
                             className="flex flex-col items-center justify-center px-5 py-3 rounded-2xl border border-dashed border-[#222] hover:border-slate-300 hover:bg-white/5 cursor-pointer transition-all duration-200 min-w-[180px] h-20 text-[#625D71] hover:text-slate-300"
                         >
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-1"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            <span className="text-[10px] font-bold tracking-widest uppercase">New Profile</span>
+                            <span className="text-[10px] font-bold tracking-widest uppercase">New Recipe</span>
                         </div>
                     </div>
 
