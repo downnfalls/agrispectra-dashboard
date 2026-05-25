@@ -202,13 +202,8 @@ function Energy() {
                             );
                             live = true;
                         } else {
-                            calculatedWatts = Math.round(
-                                (MAX_WATTS_PER_CHANNEL.blue * (stageRatios.blue / 100) +
-                                    MAX_WATTS_PER_CHANNEL.deepRed * (stageRatios.red / 100) +
-                                    MAX_WATTS_PER_CHANNEL.farRed * (stageRatios.farRed / 100) +
-                                    MAX_WATTS_PER_CHANNEL.white * (stageRatios.white / 100))
-                                * (activeIntensity / 100)
-                            );
+                            // No real data from ESP — show 0
+                            calculatedWatts = 0;
                         }
                     }
 
