@@ -176,7 +176,8 @@ function Dashboard() {
                     red: esp32Payload.red?.pwm ?? null,
                     farRed: esp32Payload.farRed?.pwm ?? null,
                     white: esp32Payload.white?.pwm ?? null
-                }
+                },
+                powerWatts: esp32Payload.power_watts ?? null
             };
         };
 
@@ -225,7 +226,8 @@ function Dashboard() {
                         { name: "Red (660nm)", status: "WAITING...", percentage: 0, barColor: "bg-red-500", textColor: "text-red-500", statusColor: "text-[#625D71]", rawValue: 0 },
                         { name: "Far-Red (730nm)", status: "WAITING...", percentage: 0, barColor: "bg-pink-700", textColor: "text-pink-700", statusColor: "text-[#625D71]", rawValue: 0 },
                         { name: "White", status: "WAITING...", percentage: 0, barColor: "bg-gray-500", textColor: "text-gray-500", statusColor: "text-[#625D71]", rawValue: 0 }
-                    ]
+                    ],
+                    powerWatts: null
                 };
 
                 const mockApiResponse = {
@@ -249,7 +251,8 @@ function Dashboard() {
                         activePeriod: processed.activePeriod,
                         stageTargetPPFD: processed.stageTargetPPFD || 0,
                         stageRatios: processed.stageRatios || { blue: 25, red: 25, farRed: 25, white: 25 },
-                        pwm: processed.pwm || null
+                        pwm: processed.pwm || null,
+                        powerWatts: processed.powerWatts ?? null
                     },
                     spectrum: processed.spectrumData,
                     stats: {
@@ -349,7 +352,8 @@ function Dashboard() {
                                 activePeriod: processed.activePeriod,
                                 stageTargetPPFD: processed.stageTargetPPFD || 0,
                                 stageRatios: processed.stageRatios || { blue: 25, red: 25, farRed: 25, white: 25 },
-                                pwm: processed.pwm || null
+                                pwm: processed.pwm || null,
+                                powerWatts: processed.powerWatts ?? null
                             },
                             spectrum: processed.spectrumData,
                             stats: {
@@ -734,7 +738,11 @@ function Dashboard() {
                         let currentWatts;
                         let isLive = false;
 
-                        if (pwm && pwm.blue !== null) {
+                        if (growthState.powerWatts !== undefined && growthState.powerWatts !== null) {
+                            // Prefer power_watts sent directly from ESP32
+                            currentWatts = Math.round(growthState.powerWatts);
+                            isLive = true;
+                        } else if (pwm && pwm.blue !== null) {
                             // Use real PWM duty cycle from ESP32
                             currentWatts = Math.round(
                                 MAX_WATTS_PER_CHANNEL.blue    * ((pwm.blue   || 0) / 100) +
@@ -744,16 +752,8 @@ function Dashboard() {
                             );
                             isLive = true;
                         } else {
-                            // Fallback: estimate from recipe ratio × period intensity
-                            const intensity = growthState.activePeriod?.intensity || 0;
-                            const ratios = growthState.stageRatios || { blue: 25, red: 25, farRed: 25, white: 25 };
-                            currentWatts = Math.round(
-                                (MAX_WATTS_PER_CHANNEL.blue    * (ratios.blue   / 100) +
-                                 MAX_WATTS_PER_CHANNEL.deepRed  * (ratios.red    / 100) +
-                                 MAX_WATTS_PER_CHANNEL.farRed   * (ratios.farRed / 100) +
-                                 MAX_WATTS_PER_CHANNEL.white    * (ratios.white  / 100))
-                                * (intensity / 100)
-                            );
+                            // Show 0 if ESP is not sending data
+                            currentWatts = 0;
                         }
                         const usagePct = Math.round((currentWatts / TOTAL_MAX_WATTS) * 100);
                         return (
@@ -769,7 +769,7 @@ function Dashboard() {
                                         <span className="text-gray-400 font-bold">W</span>
                                     </div>
                                     <div className="flex items-center justify-between mb-3">
-                                        <span className="text-[#625D71] text-[9px] font-bold tracking-widest">OF {Math.round(TOTAL_MAX_WATTS)}W MAX ({isLive ? 'LIVE' : 'EST.'})</span>
+                                        <span className="text-[#625D71] text-[9px] font-bold tracking-widest">{isLive ? 'LIVE' : 'STANDBY'}</span>
                                         <span className="text-[#625D71] text-[9px] font-bold tracking-widest">{usagePct}%</span>
                                     </div>
                                     <div className="h-1.5 bg-[#15121C] rounded-full overflow-hidden flex">

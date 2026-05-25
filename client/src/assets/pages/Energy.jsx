@@ -367,7 +367,7 @@ function Energy() {
                         <div className="flex items-center gap-3 bg-[#1A1A1A] rounded-full px-5 py-2 border border-[#333]">
                             <div className={`w-2 h-2 rounded-full ${isToday && liveData.isLive ? 'bg-[#3B82F6] animate-pulse' : isToday ? 'bg-orange-400' : 'bg-[#625D71]'}`}></div>
                             <span className="text-[#E0E0E0] font-bold text-[9px] tracking-widest uppercase">
-                                {isToday ? (liveData.isLive ? 'Real-time PWM Mode' : 'Estimated Mode') : 'Historical Data'}
+                                {isToday ? (liveData.isLive ? 'Real-time Mode' : 'Standby / Offline Mode') : 'Historical Data'}
                             </span>
                         </div>
                     </div>
@@ -430,18 +430,7 @@ function Energy() {
                 </div>
 
                 {/* Bottom Row Metrics */}
-                <div className="col-span-12 md:col-span-4 bg-[#111] border border-[#222] rounded-3xl p-8">
-                    <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-6">Max System Load</h3>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-white text-4xl font-bold tracking-tight">{Math.round(TOTAL_MAX_WATTS)}</span>
-                        <span className="text-[#625D71] font-bold text-sm uppercase">Watts</span>
-                    </div>
-                    <div className="w-full h-1 bg-[#222] rounded-full mt-6 overflow-hidden">
-                        <div className="h-full bg-[#3B82F6] rounded-full transition-all duration-1000" style={{ width: `${(liveData.currentWatts / TOTAL_MAX_WATTS * 100)}%` }}></div>
-                    </div>
-                </div>
-
-                <div className="col-span-12 md:col-span-4 bg-[#111] border border-[#222] rounded-3xl p-8">
+                <div className="col-span-12 md:col-span-6 bg-[#111] border border-[#222] rounded-3xl p-8">
                     <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-6">Monthly Total</h3>
                     <div className="flex items-baseline gap-2">
                         <span className="text-white text-4xl font-bold tracking-tight">{monthlyTotalKwh}</span>
@@ -452,9 +441,9 @@ function Energy() {
                     </div>
                 </div>
 
-                <div className="col-span-12 md:col-span-4 bg-[#111] border border-[#222] rounded-3xl p-8 flex flex-col justify-between">
+                <div className="col-span-12 md:col-span-6 bg-[#111] border border-[#222] rounded-3xl p-8 flex flex-col justify-between min-h-[140px]">
                     <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-4">Active Profile</h3>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center mt-auto">
                         <span className="text-[#3B82F6] text-2xl font-bold tracking-tight truncate mr-2">{recipeInfo.recipeName}</span>
                         <div className="bg-[#3B82F6]/10 text-[#3B82F6] px-3 py-1 rounded-lg text-[9px] font-bold tracking-widest uppercase whitespace-nowrap">Deployed</div>
                     </div>
