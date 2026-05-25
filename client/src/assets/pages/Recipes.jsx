@@ -904,10 +904,9 @@ function RecipeEditor({ profile, onDiscard, onSave, onUpdateProfileName, onAddSt
                     </button>
                     <button 
                         onClick={onSave} 
-                        disabled={isExceedingTotal}
-                        className={`px-10 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors ${isExceedingTotal ? 'bg-[#2A2732] text-[#625D71] cursor-not-allowed' : 'bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] shadow-[0_0_20px_rgba(151,203,255,0.3)]'}`}
+                        className={`px-10 py-3.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-colors ${isExceedingTotal ? 'bg-amber-500 hover:bg-amber-400 text-[#15121B] shadow-[0_0_20px_rgba(245,158,11,0.3)]' : 'bg-[#97CBFF] hover:bg-[#82bcf6] text-[#15121B] shadow-[0_0_20px_rgba(151,203,255,0.3)]'}`}
                     >
-                        Save Recipe
+                        {isExceedingTotal ? '⚠️ Save Recipe' : 'Save Recipe'}
                     </button>
                 </div>
             </div>
