@@ -234,8 +234,8 @@ export default function Recipes() {
         if (activeProfile) {
             const limitCheck = checkProfilePPFDLimit(activeProfile);
             if (limitCheck) {
-                alert(`ไม่สามารถบันทึกได้ เนื่องจาก "${limitCheck.stageName}" ตั้งค่า PPFD รวมสูงเกินกว่าที่สัดส่วนแสงปัจจุบันจะทำได้ (ทำได้สูงสุด ${Math.floor(limitCheck.maxAchievablePPFD)} PPFD)`);
-                return;
+                const proceed = window.confirm(`⚠️ คำเตือน: "${limitCheck.stageName}" ตั้งค่า PPFD รวมสูงเกินกว่าที่ฮาร์ดแวร์จะทำได้ (ทำได้สูงสุด ${Math.floor(limitCheck.maxAchievablePPFD)} PPFD)\n\nต้องการบันทึกต่อหรือไม่?`);
+                if (!proceed) return;
             }
 
             // Check for duplicate name (case-insensitive)
@@ -481,8 +481,8 @@ export default function Recipes() {
 
         const limitCheck = checkProfilePPFDLimit(activeProfile);
         if (limitCheck) {
-            alert(`ไม่สามารถ Deploy ได้ เนื่องจาก "${limitCheck.stageName}" ตั้งค่า PPFD รวมสูงเกินกว่าที่สัดส่วนแสงปัจจุบันจะทำได้ (ทำได้สูงสุด ${Math.floor(limitCheck.maxAchievablePPFD)} PPFD)`);
-            return;
+            const proceed = window.confirm(`⚠️ คำเตือน: "${limitCheck.stageName}" ตั้งค่า PPFD รวมสูงเกินกว่าที่ฮาร์ดแวร์จะทำได้ (ทำได้สูงสุด ${Math.floor(limitCheck.maxAchievablePPFD)} PPFD)\n\nต้องการ Deploy ต่อหรือไม่?`);
+            if (!proceed) return;
         }
 
         setIsDeploying(true);
