@@ -21,7 +21,7 @@ var (
 	currentESP32State *HardwareState
 	clients           = make(map[*websocket.Conn]bool)          // แดชบอร์ด (Browser)
 	hardwareClients   = make(map[*websocket.Conn]bool)          // ฮาร์ดแวร์ (ESP32)
-	broadcast         = make(chan HardwareState)
+	broadcast         = make(chan HardwareState, 20)            // เพิ่ม buffer ป้องกัน block
 	upgrader          = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -145,8 +145,13 @@ func (h *HardwareHandler) UpdateState(c *gin.Context) {
 	currentESP32State = &state
 	esp32StateLock.Unlock()
 
-	// พ่นข้อมูลลงท่อ Broadcast
-	broadcast <- state
+	// พ่นข้อมูลลงท่อ Broadcast แบบ non-blocking
+	select {
+	case broadcast <- state:
+	default:
+		// ถ้าช่องเต็ม ให้ข้ามไป (ป้องกัน block)
+		fmt.Println("⚠️ Broadcast channel full, dropping state update for dashboard clients")
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Hardware state updated"})
 }
@@ -157,14 +162,22 @@ func (h *HardwareHandler) HandleMessages() {
 		msg := <-broadcast
 		
 		esp32StateLock.Lock()
+		var clientsList []*websocket.Conn
 		for client := range clients {
+			clientsList = append(clientsList, client)
+		}
+		esp32StateLock.Unlock()
+
+		for _, client := range clientsList {
+			client.SetWriteDeadline(time.Now().Add(2 * time.Second))
 			err := client.WriteJSON(msg)
 			if err != nil {
 				client.Close()
+				esp32StateLock.Lock()
 				delete(clients, client)
+				esp32StateLock.Unlock()
 			}
 		}
-		esp32StateLock.Unlock()
 	}
 }
 
@@ -230,10 +243,22 @@ func (h *HardwareHandler) broadcastConnectionStatus() {
 	}
 
 	esp32StateLock.Lock()
+	var clientsList []*websocket.Conn
 	for client := range clients {
-		client.WriteJSON(msg)
+		clientsList = append(clientsList, client)
 	}
 	esp32StateLock.Unlock()
+
+	for _, client := range clientsList {
+		client.SetWriteDeadline(time.Now().Add(2 * time.Second))
+		err := client.WriteJSON(msg)
+		if err != nil {
+			client.Close()
+			esp32StateLock.Lock()
+			delete(clients, client)
+			esp32StateLock.Unlock()
+		}
+	}
 }
 
 // ฝั่ง ESP32 จะเชื่อมต่อมาที่นี่เพื่อรอรับคำสั่ง (Profile, Control)
@@ -305,14 +330,21 @@ func (h *HardwareHandler) ConnectCommandWS(c *gin.Context) {
 // ใช้สำหรับส่งข้อมูล (JSON) ไปยัง ESP32 ทุกตัวที่ต่อสายอยู่
 func (h *HardwareHandler) SendCommand(command interface{}) {
 	esp32StateLock.Lock()
-	defer esp32StateLock.Unlock()
-
+	var targets []*websocket.Conn
 	for client := range hardwareClients {
+		targets = append(targets, client)
+	}
+	esp32StateLock.Unlock()
+
+	for _, client := range targets {
+		client.SetWriteDeadline(time.Now().Add(2 * time.Second))
 		err := client.WriteJSON(command)
 		if err != nil {
 			fmt.Printf("❌ Failed to send command to ESP32: %v\n", err)
 			client.Close()
+			esp32StateLock.Lock()
 			delete(hardwareClients, client)
+			esp32StateLock.Unlock()
 		} else {
 			fmt.Println("🚀 Command pushed to ESP32 successfully")
 		}
@@ -418,10 +450,22 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	}
 
 	esp32StateLock.Lock()
+	var clientsList []*websocket.Conn
 	for client := range clients {
-		client.WriteJSON(msg)
+		clientsList = append(clientsList, client)
 	}
 	esp32StateLock.Unlock()
+
+	for _, client := range clientsList {
+		client.SetWriteDeadline(time.Now().Add(2 * time.Second))
+		err := client.WriteJSON(msg)
+		if err != nil {
+			client.Close()
+			esp32StateLock.Lock()
+			delete(clients, client)
+			esp32StateLock.Unlock()
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Image uploaded successfully",
