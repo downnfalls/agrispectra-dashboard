@@ -447,7 +447,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	fileBytes, err := os.ReadFile(savePath)
 	if err == nil {
 		base64Str := base64.StdEncoding.EncodeToString(fileBytes)
-		req, reqErr := http.NewRequest("POST", "https://detect.roboflow.com/pfal-9vkwz/1?api_key=KSL83MVJLDBQHbh2R62M", strings.NewReader(base64Str))
+		req, reqErr := http.NewRequest("POST", "https://detect.roboflow.com/pfal-9vkwz/3?api_key=KSL83MVJLDBQHbh2R62M", strings.NewReader(base64Str))
 		if reqErr == nil {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			client := &http.Client{Timeout: 15 * time.Second}
