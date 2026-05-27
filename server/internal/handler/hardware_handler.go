@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -435,18 +436,59 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	imageUrl := fmt.Sprintf("/uploads/images/%s", filename)
 	captureTime := time.Now().Format("Jan 02, 2006 - 15:04:05")
 
+	// ----------------------------------------------------
+	// ส่งรูปให้ Cloud AI (Roboflow) วิเคราะห์หาจำนวนใบ
+	// ----------------------------------------------------
+	leafCount := 0
+	harvestReadiness := 0.0
+
+	fileData, err := os.Open(savePath)
+	if err == nil {
+		req, reqErr := http.NewRequest("POST", "https://detect.roboflow.com/pfal-9vkwz/1?api_key=KSL83MVJLDBQHbh2R62M", fileData)
+		if reqErr == nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			client := &http.Client{Timeout: 15 * time.Second}
+			resp, doErr := client.Do(req)
+			if doErr == nil {
+				defer resp.Body.Close()
+				var aiResult struct {
+					Predictions []struct {
+						Class      string  `json:"class"`
+						Confidence float64 `json:"confidence"`
+					} `json:"predictions"`
+				}
+				if decodeErr := json.NewDecoder(resp.Body).Decode(&aiResult); decodeErr == nil {
+					for _, p := range aiResult.Predictions {
+						if p.Class == "leaf" && p.Confidence >= 0.0 {
+							leafCount++
+						}
+					}
+				}
+			}
+		}
+		fileData.Close()
+	}
+
+	// ความพร้อมเก็บเกี่ยว (อิงจาก Python count / 7) ขอทำเป็นเปอร์เซ็นต์
+	harvestReadiness = (float64(leafCount) / 7.0) * 100.0
+	if harvestReadiness > 100.0 {
+		harvestReadiness = 100.0
+	}
+
 	esp32StateLock.Lock()
 	if currentESP32State == nil {
 		currentESP32State = &HardwareState{}
 	}
 	currentESP32State.LastImageUrl = imageUrl
 	currentESP32State.LastCaptureTime = captureTime
+	currentESP32State.LeafCount = leafCount
 	esp32StateLock.Unlock()
 
-	// แจ้งเตือนไปยัง Web Socket แดชบอร์ดว่ามีรูปภาพใหม่ (เผื่อต้องการให้แดชบอร์ดอัปเดตอัตโนมัติ)
+	// แจ้งเตือนไปยัง Web Socket แดชบอร์ดว่ามีรูปภาพใหม่
 	msg := gin.H{
-		"type": "new_image",
-		"url":  imageUrl,
+		"type":       "new_image",
+		"url":        imageUrl,
+		"leaf_count": leafCount,
 	}
 
 	esp32StateLock.Lock()
@@ -467,8 +509,13 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 		}
 	}
 
+	// ปัดทศนิยมให้เหลือ 2 ตำแหน่ง
+	harvestReadiness = math.Round(harvestReadiness*100) / 100
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Image uploaded successfully",
-		"url":     imageUrl,
+		"message":           "Image uploaded successfully",
+		"url":               imageUrl,
+		"leaf_count":        leafCount,
+		"harvest_readiness": harvestReadiness,
 	})
 }
