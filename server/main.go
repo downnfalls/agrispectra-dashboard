@@ -53,6 +53,11 @@ func main() {
 		log.Printf("Warning: Failed to seed energy data: %v", err)
 	}
 
+	// Seed mock growth data
+	if err := growthRepo.SeedMockData(); err != nil {
+		log.Printf("Warning: Failed to seed growth data: %v", err)
+	}
+
 	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)

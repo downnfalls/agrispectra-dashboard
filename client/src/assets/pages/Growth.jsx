@@ -76,13 +76,13 @@ function Growth() {
     // --- Computed values ---
     const maxLeafCount = useMemo(() => {
         if (!growthData.length) return 10;
-        const max = Math.max(...growthData.map(d => d.avg_leaf_count || 0));
+        const max = Math.max(...growthData.map(d => d.avg_leaf_per_plant || 0));
         return max > 0 ? Math.ceil(max * 1.2) : 10;
     }, [growthData]);
 
     const avgLeafOverall = useMemo(() => {
         if (!growthData.length) return 0;
-        const sum = growthData.reduce((acc, d) => acc + (d.avg_leaf_count || 0), 0);
+        const sum = growthData.reduce((acc, d) => acc + (d.avg_leaf_per_plant || 0), 0);
         return (sum / growthData.length).toFixed(1);
     }, [growthData]);
 
@@ -354,7 +354,7 @@ function Growth() {
                             <h3 className="text-[#625D71] font-bold text-[10px] tracking-widest uppercase mb-2">Leaf Count Per Day</h3>
                             <div className="flex items-baseline gap-2">
                                 <span className="text-white text-4xl font-bold tracking-tight">
-                                    {growthData.length > 0 ? (growthData[growthData.length - 1].avg_leaf_count || 0).toFixed(1) : '—'}
+                                    {growthData.length > 0 ? (growthData[growthData.length - 1].avg_leaf_per_plant || 0).toFixed(1) : '—'}
                                 </span>
                                 <span className="font-bold text-[11px] tracking-widest uppercase text-[#10B981]">Latest Avg</span>
                             </div>
@@ -365,7 +365,7 @@ function Growth() {
                         </div>
                     </div>
                     <div className="flex-1 min-h-0">
-                        {renderLineChart(growthData, 'avg_leaf_count', '#10B981', 'leafGrad', maxLeafCount, 'leaves', 'leaf')}
+                        {renderLineChart(growthData, 'avg_leaf_per_plant', '#10B981', 'leafGrad', maxLeafCount, 'leaves', 'leaf')}
                     </div>
                 </div>
 
@@ -424,7 +424,7 @@ function Growth() {
                                                 </span>
                                             </td>
                                             <td className="text-right py-3 px-4">
-                                                <span className="text-[#10B981] font-bold text-sm font-mono">{(row.avg_leaf_count || 0).toFixed(1)}</span>
+                                                <span className="text-[#10B981] font-bold text-sm font-mono">{(row.avg_leaf_per_plant || 0).toFixed(1)}</span>
                                             </td>
                                             <td className="text-right py-3 px-4">
                                                 <div className="flex items-center justify-end gap-2">
