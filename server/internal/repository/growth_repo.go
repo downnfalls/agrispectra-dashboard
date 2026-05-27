@@ -28,11 +28,11 @@ type DailyGrowth struct {
 }
 
 // GetDailyRange ดึงข้อมูลเฉลี่ยรายวันในช่วงวันที่กำหนด (สำหรับทำกราฟ)
-// avg_leaf_per_plant = ใบเฉลี่ยต่อต้น (leaf_count / plant_count)
+// avg_leaf_per_plant = ดึงค่า leaf_count ที่เฉลี่ยต่อต้นมาแล้วจาก DB มาหาค่าเฉลี่ยของวันนั้นอีกที
 func (r *GrowthRepo) GetDailyRange(startDate, endDate string) ([]DailyGrowth, error) {
 	var results []DailyGrowth
 	err := r.db.Model(&models.GrowthRecord{}).
-		Select("date, AVG(CASE WHEN plant_count > 0 THEN CAST(leaf_count AS REAL) / plant_count ELSE 0 END) as avg_leaf_per_plant, AVG(harvest_readiness) as avg_harvest_ready, COUNT(*) as scan_count").
+		Select("date, AVG(leaf_count) as avg_leaf_per_plant, AVG(harvest_readiness) as avg_harvest_ready, COUNT(*) as scan_count").
 		Where("date >= ? AND date <= ?", startDate, endDate).
 		Group("date").
 		Order("date ASC").

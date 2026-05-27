@@ -550,9 +550,13 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 
 	// บันทึกข้อมูลการเจริญเติบโตลง DB
 	if h.growthRepo != nil {
+		avgLeafForDB := float64(leafCount)
+		if plantCount > 0 {
+			avgLeafForDB = float64(leafCount) / float64(plantCount)
+		}
 		growthRecord := &models.GrowthRecord{
 			Date:             time.Now().Format("2006-01-02"),
-			LeafCount:        leafCount,
+			LeafCount:        math.Round(avgLeafForDB*10) / 10, // ทศนิยม 1 ตำแหน่ง
 			PlantCount:       plantCount,
 			HarvestReadiness: math.Round(harvestReadiness*100) / 100,
 			ImageURL:         imageUrl,
@@ -560,7 +564,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 		if err := h.growthRepo.Create(growthRecord); err != nil {
 			fmt.Printf("❌ Failed to save growth data: %v\n", err)
 		} else {
-			fmt.Printf("🌱 Growth data saved: %d leaves, %d plants, %.1f%% readiness\n", leafCount, plantCount, harvestReadiness)
+			fmt.Printf("🌱 Growth data saved: %.1f avg leaves, %d plants, %.1f%% readiness\n", avgLeafForDB, plantCount, harvestReadiness)
 		}
 	}
 
