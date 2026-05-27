@@ -164,9 +164,9 @@ export default function Recipes() {
                                         farRed: rawStage.farRed || 0,
                                         blue: rawStage.blue || 0,
                                         white: rawStage.white || 0,
-                                        leafCount: rawStage.leaf || 8,
+                                        leafCount: rawStage.leaf !== null ? rawStage.leaf : 8,
                                         useLeafCount: rawStage.leaf !== null,
-                                        growthThreshold: rawStage.growth || 50,
+                                        growthThreshold: rawStage.growth !== null ? rawStage.growth : 50,
                                         useGrowth: rawStage.growth !== null && rawStage.growth !== undefined,
                                         lightIntensity: rawStage.ppfd || 0,
                                         timeline: timeline.length > 0 ? timeline : undefined
@@ -947,10 +947,10 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
     };
 
     // Handle mock values default initializations
-    const useLeafCount = stage.useLeafCount !== false;
-    const leafCount = stage.leafCount || 8;
-    const useGrowth = stage.useGrowth || false;
-    const growthThreshold = stage.growthThreshold || 50;
+    const useLeafCount = stage.useLeafCount ?? true;
+    const leafCount = stage.leafCount ?? 8;
+    const useGrowth = stage.useGrowth ?? false;
+    const growthThreshold = stage.growthThreshold ?? 50;
 
     // Timeline logic
     const defaultTimeline = [
@@ -1189,7 +1189,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         <input
                             type="number"
                             value={leafCount}
-                            onChange={(e) => onUpdateLogic('leafCount', e.target.value)}
+                            onChange={(e) => onUpdateLogic('leafCount', e.target.value === '' ? 0 : e.target.value)}
                             disabled={!useLeafCount}
                             className={`bg-[#15121C] border border-[#2A2732] rounded-lg px-2 py-2 w-16 text-center font-bold text-xs focus:border-[#97CBFF] outline-none transition-colors ${useLeafCount ? 'text-[#97CBFF]' : 'text-[#625D71] opacity-50'}`}
                         />
@@ -1207,7 +1207,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                             <input
                                 type="number"
                                 value={growthThreshold}
-                                onChange={(e) => onUpdateLogic('growthThreshold', e.target.value)}
+                                onChange={(e) => onUpdateLogic('growthThreshold', e.target.value === '' ? 0 : e.target.value)}
                                 disabled={!useGrowth}
                                 className={`bg-[#15121C] border border-[#2A2732] rounded-lg px-2 py-2 w-16 text-center font-bold text-xs focus:border-[#34D399] outline-none transition-colors ${useGrowth ? 'text-[#34D399]' : 'text-[#625D71] opacity-50'}`}
                             />
