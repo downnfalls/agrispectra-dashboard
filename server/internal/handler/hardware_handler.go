@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"os"
@@ -24,9 +23,9 @@ import (
 var (
 	esp32StateLock    sync.RWMutex
 	currentESP32State *HardwareState
-	clients           = make(map[*websocket.Conn]bool)          // แดชบอร์ด (Browser)
-	hardwareClients   = make(map[*websocket.Conn]bool)          // ฮาร์ดแวร์ (ESP32)
-	broadcast         = make(chan HardwareState, 20)            // เพิ่ม buffer ป้องกัน block
+	clients           = make(map[*websocket.Conn]bool) // แดชบอร์ด (Browser)
+	hardwareClients   = make(map[*websocket.Conn]bool) // ฮาร์ดแวร์ (ESP32)
+	broadcast         = make(chan HardwareState, 20)   // เพิ่ม buffer ป้องกัน block
 	upgrader          = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -44,7 +43,7 @@ var maxWattsPerChannel = struct {
 	White:   (2.75 * 65.0 / 1000.0) * 180.0,  // White 6500K
 	DeepRed: (2.0 * 700.0 / 1000.0) * 54.0,   // Deep Red 660nm
 	FarRed:  (2.0 * 350.0 / 1000.0) * 18.0,   // Far Red 730nm
-	Blue:    (2.975 * 350.0 / 1000.0) * 36.0,  // Royal Blue 450nm
+	Blue:    (2.975 * 350.0 / 1000.0) * 36.0, // Royal Blue 450nm
 }
 
 type ColorData struct {
@@ -165,7 +164,7 @@ func (h *HardwareHandler) HandleMessages() {
 	for {
 		// รอรับข้อมูลจากช่อง broadcast
 		msg := <-broadcast
-		
+
 		esp32StateLock.Lock()
 		var clientsList []*websocket.Conn
 		for client := range clients {
@@ -284,7 +283,7 @@ func (h *HardwareHandler) ConnectCommandWS(c *gin.Context) {
 	fmt.Printf("🛰 [Hardware] ESP32 Connected! IP: %s | Total Active Devices: %d\n", clientIP, total)
 
 	// สร้าง Goroutine มารอฟังการตัดการเชื่อมต่อ (ถ้า ESP32 หายไปจะได้รู้ทันที)
-	
+
 	// ล็อกเวลาถ้าไม่มี Ping-Pong (ตัดการเชื่อมต่ออัตโนมัติภายใน 15 วินาทีถ้าไม่ได้ PONG)
 	ws.SetReadDeadline(time.Now().Add(15 * time.Second))
 	ws.SetPongHandler(func(string) error {
@@ -330,7 +329,6 @@ func (h *HardwareHandler) ConnectCommandWS(c *gin.Context) {
 		}
 	}()
 }
-
 
 // ใช้สำหรับส่งข้อมูล (JSON) ไปยัง ESP32 ทุกตัวที่ต่อสายอยู่
 func (h *HardwareHandler) SendCommand(command interface{}) {
@@ -456,7 +454,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 			resp, doErr := client.Do(req)
 			if doErr == nil {
 				defer resp.Body.Close()
-				
+
 				// อ่าน Body ออกมาเพื่อ Print Debug
 				importIo := true
 				_ = importIo
@@ -467,7 +465,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 				buf := new(bytes.Buffer)
 				buf.ReadFrom(resp.Body)
 				bodyBytes := buf.Bytes()
-				
+
 				fmt.Println("=====================================")
 				fmt.Println("Roboflow Response: ", string(bodyBytes))
 				fmt.Println("=====================================")
