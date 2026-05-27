@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -442,31 +446,54 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	leafCount := 0
 	harvestReadiness := 0.0
 
-	fileData, err := os.Open(savePath)
+	fileBytes, err := os.ReadFile(savePath)
 	if err == nil {
-		req, reqErr := http.NewRequest("POST", "https://detect.roboflow.com/pfal-9vkwz/1?api_key=KSL83MVJLDBQHbh2R62M", fileData)
+		base64Str := base64.StdEncoding.EncodeToString(fileBytes)
+		req, reqErr := http.NewRequest("POST", "https://detect.roboflow.com/pfal-9vkwz/1?api_key=KSL83MVJLDBQHbh2R62M", strings.NewReader(base64Str))
 		if reqErr == nil {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			client := &http.Client{Timeout: 15 * time.Second}
 			resp, doErr := client.Do(req)
 			if doErr == nil {
 				defer resp.Body.Close()
+				
+				// อ่าน Body ออกมาเพื่อ Print Debug
+				importIo := true
+				_ = importIo
+
+				// ใช้แพ็กเกจ io.ReadAll (เราต้องเช็คว่า import "io" หรือยัง ถ้ายังจะ error เดี๋ยวเราใช้เคล็ดลับ import)
+				// แต่เพื่อความง่าย เราอ่านผ่าน json ได้เลยแล้ว print
+				// จะใช้วิธีอ่านใส่ byte array ง่ายๆ
+				buf := new(bytes.Buffer)
+				buf.ReadFrom(resp.Body)
+				bodyBytes := buf.Bytes()
+				
+				fmt.Println("=====================================")
+				fmt.Println("Roboflow Response: ", string(bodyBytes))
+				fmt.Println("=====================================")
+
 				var aiResult struct {
 					Predictions []struct {
 						Class      string  `json:"class"`
 						Confidence float64 `json:"confidence"`
 					} `json:"predictions"`
 				}
-				if decodeErr := json.NewDecoder(resp.Body).Decode(&aiResult); decodeErr == nil {
+				if decodeErr := json.Unmarshal(bodyBytes, &aiResult); decodeErr == nil {
 					for _, p := range aiResult.Predictions {
 						if p.Class == "leaf" && p.Confidence >= 0.0 {
 							leafCount++
 						}
 					}
+					fmt.Printf("Parsed Leaf Count: %d\n", leafCount)
+				} else {
+					fmt.Println("❌ Decode Error: ", decodeErr)
 				}
+			} else {
+				fmt.Println("❌ Roboflow API Request Error: ", doErr)
 			}
+		} else {
+			fmt.Println("❌ NewRequest Error: ", reqErr)
 		}
-		fileData.Close()
 	}
 
 	// ความพร้อมเก็บเกี่ยว (อิงจาก Python count / 7) ขอทำเป็นเปอร์เซ็นต์
