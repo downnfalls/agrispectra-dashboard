@@ -474,15 +474,51 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 					Predictions []struct {
 						Class      string  `json:"class"`
 						Confidence float64 `json:"confidence"`
+						Points     []struct {
+							X float64 `json:"x"`
+							Y float64 `json:"y"`
+						} `json:"points"`
 					} `json:"predictions"`
 				}
+
+				var totalGrowth float64
+				var plantCount int
+				const HarvestableAreaPixels = 370000.0
+
 				if decodeErr := json.Unmarshal(bodyBytes, &aiResult); decodeErr == nil {
 					for _, p := range aiResult.Predictions {
-						if p.Class == "leaf" && p.Confidence >= 0.0 {
+						if p.Class == "leaf" {
 							leafCount++
+						} else if p.Class == "plant" {
+							// 1. หาพื้นที่รูปหลายเหลี่ยม (Shoelace formula) เทียบเท่า cv2.contourArea
+							area := 0.0
+							n := len(p.Points)
+							if n >= 3 {
+								for i := 0; i < n; i++ {
+									j := (i + 1) % n
+									area += (p.Points[i].X * p.Points[j].Y) - (p.Points[j].X * p.Points[i].Y)
+								}
+								area = math.Abs(area) / 2.0
+							}
+
+							// 2. เทียบเปอร์เซ็นต์
+							growth := (area / HarvestableAreaPixels) * 100.0
+							if growth > 100.0 {
+								growth = 100.0
+							}
+							
+							totalGrowth += growth
+							plantCount++
 						}
 					}
-					fmt.Printf("Parsed Leaf Count: %d\n", leafCount)
+					
+					if plantCount > 0 {
+						harvestReadiness = totalGrowth / float64(plantCount)
+					} else {
+						harvestReadiness = 0.0
+					}
+
+					fmt.Printf("Parsed Leaf Count: %d, Plant Count: %d, Avg Harvest Readiness: %.2f%%\n", leafCount, plantCount, harvestReadiness)
 				} else {
 					fmt.Println("❌ Decode Error: ", decodeErr)
 				}
@@ -494,10 +530,10 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 		}
 	}
 
-	// ความพร้อมเก็บเกี่ยว (อิงจาก Python count / 7) ขอทำเป็นเปอร์เซ็นต์
-	harvestReadiness = (float64(leafCount) / 7.0) * 100.0
-	if harvestReadiness > 100.0 {
-		harvestReadiness = 100.0
+	// คำนวณใบเฉลี่ยต่อต้น
+	avgLeafCount := leafCount
+	if plantCount > 0 {
+		avgLeafCount = int(math.Round(float64(leafCount) / float64(plantCount)))
 	}
 
 	esp32StateLock.Lock()
@@ -506,14 +542,14 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	}
 	currentESP32State.LastImageUrl = imageUrl
 	currentESP32State.LastCaptureTime = captureTime
-	currentESP32State.LeafCount = leafCount
+	currentESP32State.LeafCount = avgLeafCount
 	esp32StateLock.Unlock()
 
 	// แจ้งเตือนไปยัง Web Socket แดชบอร์ดว่ามีรูปภาพใหม่
 	msg := gin.H{
 		"type":       "new_image",
 		"url":        imageUrl,
-		"leaf_count": leafCount,
+		"leaf_count": avgLeafCount,
 	}
 
 	esp32StateLock.Lock()
@@ -540,7 +576,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":           "Image uploaded successfully",
 		"url":               imageUrl,
-		"leaf_count":        leafCount,
+		"leaf_count":        avgLeafCount,
 		"harvest_readiness": harvestReadiness,
 	})
 }
