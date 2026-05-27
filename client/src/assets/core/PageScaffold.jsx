@@ -6,6 +6,7 @@ import DashboardLayout from './DashboardLayout';
 import Dashboard from '../pages/Dashboard';
 import Energy from '../pages/Energy';
 import Recipes from '../pages/Recipes';
+import Growth from '../pages/Growth';
 import NotFound from '../pages/NotFound';
 
 const RequireAuth = ({ children }) => {
@@ -42,6 +43,7 @@ function PageScaffold() {
           <Route index element={<Dashboard />} />
           <Route path="energy" element={<Energy />} />
           <Route path="recipes" element={<Recipes />} />
+          <Route path="growth" element={<Growth />} />
         </Route>
 
         {/* 404 */}

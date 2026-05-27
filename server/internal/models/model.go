@@ -33,6 +33,16 @@ type EnergyRecord struct {
 	Kwh  float64 `json:"kwh"`                                            // kWh consumed in that hour
 }
 
+type GrowthRecord struct {
+	ID               uint    `gorm:"primaryKey" json:"id"`
+	Date             string  `gorm:"not null;index" json:"date"`              // "2026-05-27"
+	LeafCount        int     `json:"leaf_count"`                              // จำนวนใบที่ตรวจพบ
+	PlantCount       int     `json:"plant_count"`                             // จำนวนต้นที่ตรวจพบ
+	HarvestReadiness float64 `json:"harvest_readiness"`                       // % ความพร้อมเก็บเกี่ยว
+	ImageURL         string  `json:"image_url,omitempty"`                     // URL รูปที่สแกน
+	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
 type User struct {
 	Username string `json:"username" gorm:"primaryKey"`
 	Password string `json:"password"`

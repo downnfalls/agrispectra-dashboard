@@ -33,6 +33,7 @@ func main() {
 		&models.LightProfile{},
 		&models.PowerConsumption{},
 		&models.EnergyRecord{},
+		&models.GrowthRecord{},
 		&models.SystemState{},
 	)
 	if err != nil {
@@ -44,6 +45,7 @@ func main() {
 	logRepo := repository.NewLogRepo(db)
 	lightProfileRepo := repository.NewLightProfileRepo(db)
 	energyRepo := repository.NewEnergyRepo(db)
+	growthRepo := repository.NewGrowthRepo(db)
 	systemStateRepo := repository.NewSystemStateRepo(db)
 
 	// Seed mock energy data (May 1-3 + April 2026)
@@ -54,9 +56,10 @@ func main() {
 	// 2. กำหนด Handlers
 	authHandler := handler.NewAuthHandler(userRepo)
 	logHandler := handler.NewLogHandler(logRepo)
-	hardwareHandler := handler.NewHardwareHandler(energyRepo)
+	hardwareHandler := handler.NewHardwareHandler(energyRepo, growthRepo)
 	lightProfileHandler := handler.NewLightProfileHandler(lightProfileRepo, hardwareHandler, systemStateRepo)
 	energyHandler := handler.NewEnergyHandler(energyRepo)
+	growthHandler := handler.NewGrowthHandler(growthRepo)
 
 	// เริ่มต้นระบบ Broadcast
 	go hardwareHandler.HandleMessages()
@@ -96,6 +99,11 @@ func main() {
 		apiGroup.POST("/energy/record", energyHandler.RecordHourly)
 		apiGroup.GET("/energy/daily", energyHandler.GetDaily)
 		apiGroup.GET("/energy/monthly", energyHandler.GetMonthly)
+
+		// Growth tracking endpoints
+		apiGroup.GET("/growth/daily", growthHandler.GetDailyGrowth)
+		apiGroup.GET("/growth/detail", growthHandler.GetDateDetail)
+		apiGroup.GET("/growth/latest", growthHandler.GetLatest)
 	}
 
 	hardwareGroup := r.Group("/hardware")

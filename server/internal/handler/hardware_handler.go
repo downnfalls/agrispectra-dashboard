@@ -69,10 +69,11 @@ type HardwareState struct {
 
 type HardwareHandler struct {
 	energyRepo *repository.EnergyRepo
+	growthRepo *repository.GrowthRepo
 }
 
-func NewHardwareHandler(energyRepo *repository.EnergyRepo) *HardwareHandler {
-	return &HardwareHandler{energyRepo: energyRepo}
+func NewHardwareHandler(energyRepo *repository.EnergyRepo, growthRepo *repository.GrowthRepo) *HardwareHandler {
+	return &HardwareHandler{energyRepo: energyRepo, growthRepo: growthRepo}
 }
 
 // calculateWatts returns power from ESP32 if available, otherwise calculates from PWM
@@ -546,6 +547,22 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	currentESP32State.LeafCount = avgLeafCount
 	currentESP32State.HarvestReadiness = math.Round(harvestReadiness*100) / 100
 	esp32StateLock.Unlock()
+
+	// บันทึกข้อมูลการเจริญเติบโตลง DB
+	if h.growthRepo != nil {
+		growthRecord := &models.GrowthRecord{
+			Date:             time.Now().Format("2006-01-02"),
+			LeafCount:        leafCount,
+			PlantCount:       plantCount,
+			HarvestReadiness: math.Round(harvestReadiness*100) / 100,
+			ImageURL:         imageUrl,
+		}
+		if err := h.growthRepo.Create(growthRecord); err != nil {
+			fmt.Printf("❌ Failed to save growth data: %v\n", err)
+		} else {
+			fmt.Printf("🌱 Growth data saved: %d leaves, %d plants, %.1f%% readiness\n", leafCount, plantCount, harvestReadiness)
+		}
+	}
 
 	// แจ้งเตือนไปยัง Web Socket แดชบอร์ดว่ามีรูปภาพใหม่
 	msg := gin.H{
