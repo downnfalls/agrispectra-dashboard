@@ -166,7 +166,8 @@ export default function Recipes() {
                                         white: rawStage.white || 0,
                                         leafCount: rawStage.leaf || 8,
                                         useLeafCount: rawStage.leaf !== null,
-                                        // leaf_density removed
+                                        growthThreshold: rawStage.growth || 50,
+                                        useGrowth: rawStage.growth !== null && rawStage.growth !== undefined,
                                         lightIntensity: rawStage.ppfd || 0,
                                         timeline: timeline.length > 0 ? timeline : undefined
                                     });
@@ -339,6 +340,7 @@ export default function Recipes() {
                 blue: normBlue,
                 white: normWhite,
                 leaf: stage.useLeafCount !== false ? (parseInt(stage.leafCount) || null) : null,
+                growth: stage.useGrowth ? (parseFloat(stage.growthThreshold) || null) : null,
                 ppfd: parseInt(stage.lightIntensity) || 0,
                 period: period
             };
@@ -947,6 +949,8 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
     // Handle mock values default initializations
     const useLeafCount = stage.useLeafCount !== false;
     const leafCount = stage.leafCount || 8;
+    const useGrowth = stage.useGrowth || false;
+    const growthThreshold = stage.growthThreshold || 50;
 
     // Timeline logic
     const defaultTimeline = [
@@ -1181,7 +1185,7 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         >
                             {useLeafCount && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15121B" strokeWidth="4"><polyline points="20 6 9 17 4 12"></polyline></svg>}
                         </div>
-                        <span className="text-white font-bold text-xs tracking-wide">Leaf Count</span>
+                        <span className="text-white font-bold text-xs tracking-wide">Leaf Count ≥</span>
                         <input
                             type="number"
                             value={leafCount}
@@ -1191,7 +1195,25 @@ function ExpandedStageEditor({ stage, index, onUpdateName, onRemove, onUpdateLog
                         />
                     </div>
 
-
+                    <div className="flex items-center gap-4">
+                        <div
+                            onClick={() => onUpdateLogic('useGrowth', !useGrowth)}
+                            className={`w-5 h-5 rounded overflow-hidden flex items-center justify-center cursor-pointer border transition-colors ${useGrowth ? 'bg-[#34D399] border-[#34D399]' : 'bg-transparent border-[#625D71]'}`}
+                        >
+                            {useGrowth && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15121B" strokeWidth="4"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                        </div>
+                        <span className="text-white font-bold text-xs tracking-wide">Growth ≥</span>
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="number"
+                                value={growthThreshold}
+                                onChange={(e) => onUpdateLogic('growthThreshold', e.target.value)}
+                                disabled={!useGrowth}
+                                className={`bg-[#15121C] border border-[#2A2732] rounded-lg px-2 py-2 w-16 text-center font-bold text-xs focus:border-[#34D399] outline-none transition-colors ${useGrowth ? 'text-[#34D399]' : 'text-[#625D71] opacity-50'}`}
+                            />
+                            <span className={`font-bold text-xs ${useGrowth ? 'text-[#34D399]' : 'text-[#625D71] opacity-50'}`}>%</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

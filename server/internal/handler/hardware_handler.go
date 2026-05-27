@@ -544,6 +544,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	currentESP32State.LastImageUrl = imageUrl
 	currentESP32State.LastCaptureTime = captureTime
 	currentESP32State.LeafCount = avgLeafCount
+	currentESP32State.HarvestReadiness = math.Round(harvestReadiness*100) / 100
 	esp32StateLock.Unlock()
 
 	// แจ้งเตือนไปยัง Web Socket แดชบอร์ดว่ามีรูปภาพใหม่
