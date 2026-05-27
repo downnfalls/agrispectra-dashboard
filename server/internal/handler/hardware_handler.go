@@ -53,11 +53,12 @@ type ColorData struct {
 }
 
 type HardwareState struct {
-	Stage           string    `json:"stage"`
-	LeafCount       int       `json:"leaf_count"`
-	LeafDensity     int       `json:"leaf_density"`
-	Total           float64   `json:"total"`
-	PowerWatts      *float64  `json:"power_watts,omitempty"`
+	Stage            string    `json:"stage"`
+	LeafCount        int       `json:"leaf_count"`
+	LeafDensity      int       `json:"leaf_density"`
+	HarvestReadiness float64   `json:"harvest_readiness"`
+	Total            float64   `json:"total"`
+	PowerWatts       *float64  `json:"power_watts,omitempty"`
 	White           ColorData `json:"white"`
 	Blue            ColorData `json:"blue"`
 	Red             ColorData `json:"red"`

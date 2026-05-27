@@ -171,6 +171,7 @@ function Dashboard() {
                 currentPhaseName, currentStepIndex, totalSteps,
                 leafCount, spectrumData, currentPpfd: updatedPpfd,
                 currentTimeline, activePeriod, stageTargetPPFD, stageRatios,
+                harvestReadiness: esp32Payload.harvest_readiness ?? null,
                 pwm: {
                     blue: esp32Payload.blue?.pwm ?? null,
                     red: esp32Payload.red?.pwm ?? null,
@@ -211,7 +212,7 @@ function Dashboard() {
                     currentPhaseName: currentProfile?.stages?.[0]?.name.split('\n')[0] || "No Active Profile",
                     currentStepIndex: currentProfile?.stages?.length > 0 ? 1 : 0,
                     totalSteps: currentProfile?.stages?.length || 4,
-                    leafCount: null, currentPpfd: "--", 
+                    leafCount: null, harvestReadiness: null, currentPpfd: "--", 
                     currentTimeline: currentProfile?.stages?.[0]?.timeline || [],
                     activePeriod: calculateActivePeriod(currentProfile?.stages?.[0]?.timeline),
                     stageTargetPPFD: parseInt(currentProfile?.stages?.[0]?.lightIntensity) || 0,
@@ -247,6 +248,7 @@ function Dashboard() {
                         currentStepIndex: processed.currentStepIndex,
                         totalSteps: processed.totalSteps,
                         leafCount: processed.leafCount,
+                        harvestReadiness: processed.harvestReadiness,
                         currentTimeline: processed.currentTimeline,
                         activePeriod: processed.activePeriod,
                         stageTargetPPFD: processed.stageTargetPPFD || 0,
@@ -348,6 +350,7 @@ function Dashboard() {
                                 currentStepIndex: processed.currentStepIndex,
                                 totalSteps: processed.totalSteps,
                                 leafCount: processed.leafCount,
+                                harvestReadiness: processed.harvestReadiness,
                                 currentTimeline: processed.currentTimeline,
                                 activePeriod: processed.activePeriod,
                                 stageTargetPPFD: processed.stageTargetPPFD || 0,
@@ -674,12 +677,18 @@ function Dashboard() {
                             ))}
                         </div>
 
-                        {/* Leaf Count */}
-                        <div className="flex justify-between border-t border-[#3E3A4B] pt-6">
-                            <div className="flex flex-col items-center w-full">
+                        {/* Leaf Count & Growth Readiness */}
+                        <div className="grid grid-cols-2 gap-4 border-t border-[#3E3A4B] pt-6">
+                            <div className="flex flex-col items-center w-full border-r border-[#3E3A4B]">
                                 <span className="text-[#625D71] text-[9px] font-bold tracking-widest uppercase mb-1">Leaf Count</span>
                                 <span className={`text-xl font-mono font-bold ${growthState.leafCount != null ? 'text-[#97CBFF]' : 'text-[#625D71]'}`}>
                                     {growthState.leafCount != null ? growthState.leafCount : "--"}
+                                </span>
+                            </div>
+                            <div className="flex flex-col items-center w-full">
+                                <span className="text-[#625D71] text-[9px] font-bold tracking-widest uppercase mb-1">Growth</span>
+                                <span className={`text-xl font-mono font-bold ${growthState.harvestReadiness != null ? 'text-[#34D399]' : 'text-[#625D71]'}`}>
+                                    {growthState.harvestReadiness != null ? `${growthState.harvestReadiness}%` : "--"}
                                 </span>
                             </div>
                         </div>
