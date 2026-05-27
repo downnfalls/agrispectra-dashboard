@@ -442,6 +442,7 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 	// ส่งรูปให้ Cloud AI (Roboflow) วิเคราะห์หาจำนวนใบ
 	// ----------------------------------------------------
 	leafCount := 0
+	plantCount := 0
 	harvestReadiness := 0.0
 
 	fileBytes, err := os.ReadFile(savePath)
@@ -482,7 +483,6 @@ func (h *HardwareHandler) UploadImage(c *gin.Context) {
 				}
 
 				var totalGrowth float64
-				var plantCount int
 				const HarvestableAreaPixels = 370000.0
 
 				if decodeErr := json.Unmarshal(bodyBytes, &aiResult); decodeErr == nil {
